@@ -10,7 +10,7 @@ RESPONSES = {
         "text": (
             "Welcome to the group! 🎉\n\n"
             "Surprise voucher drops can happen anytime.\n"
-            "Make sure you turn on notifications for our official channel so you don’t miss the next one!"
+            "Make sure you turn on notifications for our official channel so you don’t miss the next one! 💵"
         ),
         "button_text": "Join Official Channel",
         "button_url": "https://t.me/advantplayofficial"
