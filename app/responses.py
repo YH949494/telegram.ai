@@ -6,7 +6,15 @@ interacts with users.  The key is the category returned by the classifier.
 """
 
 RESPONSES = {
-    "new_user": "Welcome to the group! 🎉 Feel free to ask any questions.",
+    "new_user": {
+        "text": (
+            "Welcome to the group! 🎉\n\n"
+            "Surprise voucher drops can happen anytime.\n"
+            "Make sure you turn on notifications for our official channel so you don’t miss the next one!"
+        ),
+        "button_text": "Join Official Channel",
+        "button_url": "https://t.me/advantplayofficial"
+    },
     "win_share": "Congratulations on your win! 🥳",
     "positive_signal": "Thank you for your feedback! 😊",
     "voucher_question": (
