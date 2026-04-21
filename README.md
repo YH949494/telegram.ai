@@ -62,7 +62,7 @@ This starts both the FastAPI web server and the Telegram bot in the background. 
 4. Deploy: `flyctl deploy`.
 
 A GitHub Actions workflow is provided at `.github/workflows/deploy.yml` to automatically deploy on
-every push to the `main` branch.  Make sure to add the `FLY_API_TOKEN` secret to your GitHub
+every push to the `main` branch. Make sure to add the `FLY_API_TOKEN` secret to your GitHub
 repository.
 
 ## Environment variables
@@ -77,13 +77,17 @@ GitHub secrets:
 | `MONGODB_DB`        | MongoDB database name (default: `telegram_ai`).       |
 | `MONGODB_COLLECTION`| MongoDB collection for message logs.                  |
 | `ADMIN_CHAT_ID`     | Optional chat id where suggestions are sent.          |
+| `PORT`              | HTTP port for FastAPI/Fly (default: `8000`).          |
+| `ENABLE_TAGGING`    | Enable message classification (default: `true`).      |
+| `ENABLE_SUGGESTIONS`| Enable admin suggestion forwarding (default: `true`). |
+| `ENABLE_LOW_RISK_AUTO_REPLY` | Enable low-risk auto replies (default: `true`). |
+| `ENABLE_THREADED_REPLIES` | Reply using Telegram threading (default: `true`). |
 | `FLY_API_TOKEN`     | Fly.io API token used by GitHub Actions.              |
-| `FLY_APP_NAME`      | Name of your Fly.io app (used in fly.toml).           |
 
 For Fly.io, set the secrets using `flyctl secrets set`:
 
 ```bash
-flyctl secrets set TELEGRAM_TOKEN=... MONGODB_URI=... ADMIN_CHAT_ID=...
+flyctl secrets set TELEGRAM_TOKEN=... MONGODB_URI=... MONGODB_DB=telegram_ai MONGODB_COLLECTION=messages ADMIN_CHAT_ID=...
 ```
 
 ## Repository structure

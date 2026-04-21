@@ -1,103 +1,89 @@
-import asyncio
+import logging
 
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
 from .classifier import classify
 from .config import get_settings
 from .db import log_message
 from .responses import generate_reply, get_reaction
 
-"""
-Telegram message handlers and bot initialisation.
-
-This module integrates the classifier and response logic into a Telegram bot using
-python‑telegram‑bot v20.  Messages are processed asynchronously; depending on the
-assigned category the bot either replies automatically or sends a suggestion to an
-admin chat for human follow‑up.
-"""
+logger = logging.getLogger(__name__)
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Main handler for incoming text messages.
-
-    :param update: Telegram update containing the message.
-    :param context: Telegram context.
-    """
     message = update.message
     if not message or not message.text:
         return
 
-    text = message.text
-    category = classify(text)
     settings = get_settings()
+    text = message.text
 
-    # Log the message to MongoDB (non‑blocking).
-    try:
-        log_message(category, update)
-    except Exception:
-        pass
+    logger.info(
+        "Received message chat_id=%s message_id=%s user_id=%s",
+        message.chat_id,
+        message.message_id,
+        message.from_user.id if message.from_user else None,
+    )
 
-    # Determine whether to auto reply or just suggest.
-    if category in settings.auto_reply_categories:
+    if not settings.enable_tagging:
+        logger.info("Tagging disabled; skipping classification")
+        return
+
+    category = classify(text)
+    logger.info("Classified message_id=%s category=%s", message.message_id, category)
+
+    log_message(category, update)
+
+    if category in settings.auto_reply_categories and settings.enable_low_risk_auto_reply:
         reply_text = generate_reply(category, text)
         if reply_text:
-            # Reply under the original message to maintain thread context.
-            await message.reply_text(
-                reply_text,
-                reply_to_message_id=message.message_id,
-            )
+            logger.info("Auto reply triggered for message_id=%s category=%s", message.message_id, category)
+            kwargs = {}
+            if settings.enable_threaded_replies:
+                kwargs["reply_to_message_id"] = message.message_id
+            await message.reply_text(reply_text, **kwargs)
+
         reaction = get_reaction(category)
         if reaction:
-            # Send a reaction as a separate reply.  python‑telegram‑bot does not
-            # yet support the built‑in reaction API, so we emulate a reaction by
-            # sending the emoji as a quick acknowledgement.
-            await message.reply_text(
-                reaction,
-                reply_to_message_id=message.message_id,
-            )
-    elif category in settings.suggestion_only_categories:
-        # Generate a suggested reply and forward to admin chat.
+            kwargs = {}
+            if settings.enable_threaded_replies:
+                kwargs["reply_to_message_id"] = message.message_id
+            await message.reply_text(reaction, **kwargs)
+
+    if category in settings.suggestion_only_categories and settings.enable_suggestions:
         suggestion = generate_reply(category, text)
         if suggestion and settings.admin_chat_id:
+            logger.info("Suggestion forwarded for message_id=%s category=%s", message.message_id, category)
             admin_text = (
                 f"Suggestion for message {message.message_id} in chat {message.chat_id}:\n"
-                f"User: {message.from_user.username or message.from_user.id}\n"
+                f"User: {message.from_user.username or message.from_user.id if message.from_user else 'unknown'}\n"
+                f"Category: {category}\n"
                 f"Original: {text}\n"
                 f"Suggested reply: {suggestion}"
             )
             await context.bot.send_message(chat_id=settings.admin_chat_id, text=admin_text)
-    else:
-        # Unknown or unhandled categories are ignored.
-        return
 
 
-def setup_application() -> "telegram.ext.Application":
-    """
-    Build and return a configured Application instance.
-
-    The returned Application is ready to be started and will listen for text messages.
-    """
+def setup_application():
     settings = get_settings()
     application = ApplicationBuilder().token(settings.telegram_token).build()
-    # Add a single handler for all non‑command text messages.
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message_handler))
     return application
 
 
-async def run_bot(application) -> None:
-    """
-    Initialise and start the bot.
-
-    :param application: The Telegram Application instance.
-    """
+async def start_bot(application) -> None:
     await application.initialize()
     await application.start()
-    # Keep the bot running.  Without idle(), the application would exit.
     await application.updater.start_polling()
+
+
+async def stop_bot(application) -> None:
+    try:
+        if application.updater:
+            await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
+        logger.info("Telegram bot stopped")
+    except Exception:
+        logger.exception("Failed to stop Telegram bot cleanly")
