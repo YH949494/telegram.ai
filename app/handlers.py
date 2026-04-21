@@ -1,7 +1,7 @@
 import logging
 from types import SimpleNamespace
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji, Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
 try:
@@ -49,6 +49,31 @@ def _prepare_reply_payload(payload, allow_button: bool = False):
                 )
         return reply_text, reply_markup
     return payload or "", None
+
+
+async def safe_add_reaction(
+    *,
+    bot,
+    chat_id: int,
+    message_id: int,
+    emoji: str,
+    flow: str,
+) -> None:
+    try:
+        await bot.set_message_reaction(
+            chat_id=chat_id,
+            message_id=message_id,
+            reaction=[ReactionTypeEmoji(emoji=emoji)],
+        )
+    except Exception:
+        logger.warning(
+            "Failed to add reaction chat_id=%s message_id=%s flow=%s emoji=%s",
+            chat_id,
+            message_id,
+            flow,
+            emoji,
+            exc_info=True,
+        )
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -99,6 +124,15 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     throttle_reason = "none"
 
     if action == "auto_reply" and settings.enable_low_risk_auto_reply:
+        if category == "win_share":
+            await safe_add_reaction(
+                bot=context.bot,
+                chat_id=message.chat_id,
+                message_id=message.message_id,
+                emoji="🔥",
+                flow="win_share_intake",
+            )
+
         user_id = message.from_user.id if message.from_user else 0
         try:
             throttle_decision = auto_reply_throttle.evaluate_auto_reply_throttle(
@@ -144,6 +178,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             else:
                 reply_payload = generate_reply(category, text)
                 allow_button = True
+
+            if category == "new_user":
+                await safe_add_reaction(
+                    bot=context.bot,
+                    chat_id=message.chat_id,
+                    message_id=message.message_id,
+                    emoji="🎉",
+                    flow="new_user_onboarding",
+                )
+
             reply_text, reply_markup = _prepare_reply_payload(
                 reply_payload,
                 allow_button=allow_button,
