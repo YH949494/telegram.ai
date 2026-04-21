@@ -8,45 +8,61 @@
   </head>
   <body>
     <div class="container">
-      <h1>AI Observer Plugins</h1>
-      <div class="grid">
-        <div class="card">
-          <div class="icon">🏷️</div>
-          <div class="title">Tagging</div>
-          <div class="toggle">
-            <input type="checkbox" id="tagging" checked />
-            <label for="tagging">Enable</label>
+      <h1>Telegram AI Observer</h1>
+
+      <section class="panel">
+        <h2>System Status</h2>
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="label">Web</span>
+            <span class="value ok">{{ system_status.web }}</span>
+          </div>
+          <div class="status-item">
+            <span class="label">Bot</span>
+            <span class="value {{ 'ok' if system_status.bot == 'running' else 'warn' }}">{{ system_status.bot }}</span>
+          </div>
+          <div class="status-item">
+            <span class="label">Mongo DB</span>
+            <span class="value">{{ system_status.mongodb_db }}</span>
+          </div>
+          <div class="status-item">
+            <span class="label">Collection</span>
+            <span class="value">{{ system_status.mongodb_collection }}</span>
           </div>
         </div>
-        <div class="card">
-          <div class="icon">💬</div>
-          <div class="title">Suggestions</div>
-          <div class="toggle">
-            <input type="checkbox" id="suggestions" checked />
-            <label for="suggestions">Enable</label>
-          </div>
+        {% if system_status.bot_last_error %}
+        <p class="warn-text">Bot startup error: {{ system_status.bot_last_error }}</p>
+        {% endif %}
+      </section>
+
+      <section class="panel">
+        <h2>Feature Toggles</h2>
+        <div class="toggle-list">
+          <div class="toggle-row"><span>Tagging</span><span class="badge">{{ 'enabled' if feature_flags.tagging else 'disabled' }}</span></div>
+          <div class="toggle-row"><span>Suggestion Mode</span><span class="badge">{{ 'enabled' if feature_flags.suggestions else 'disabled' }}</span></div>
+          <div class="toggle-row"><span>Low-risk Auto Reply</span><span class="badge">{{ 'enabled' if feature_flags.low_risk_auto_reply else 'disabled' }}</span></div>
+          <div class="toggle-row"><span>Threaded Reply Mode</span><span class="badge">{{ 'enabled' if feature_flags.threaded_replies else 'disabled' }}</span></div>
         </div>
-        <div class="card">
-          <div class="icon">🤖</div>
-          <div class="title">Auto Reaction</div>
-          <div class="toggle">
-            <input type="checkbox" id="auto_reaction" checked />
-            <label for="auto_reaction">Enable</label>
-          </div>
-        </div>
-        <div class="card">
-          <div class="icon">🔄</div>
-          <div class="title">Threaded Replies</div>
-          <div class="toggle">
-            <input type="checkbox" id="threaded" checked />
-            <label for="threaded">Enable</label>
-          </div>
-        </div>
-      </div>
-      <p class="note">
-        Changes made here are not persisted. In a production system, these toggles should
-        send a request to update the bot configuration.
-      </p>
+      </section>
+
+      <section class="panel">
+        <h2>Category Handling</h2>
+        <table>
+          <thead>
+            <tr><th>Category</th><th>Mode</th></tr>
+          </thead>
+          <tbody>
+            {% for category, mode in mode_by_category.items() %}
+            <tr>
+              <td>{{ category }}</td>
+              <td><span class="mode {{ 'auto' if mode == 'auto-reply' else 'suggest' }}">{{ mode }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <p class="note">This dashboard is read-only in this build and is structured for future auth and write endpoints.</p>
     </div>
   </body>
 </html>
