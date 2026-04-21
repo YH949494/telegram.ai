@@ -1,0 +1,28 @@
+# Default configuration for the AI observer.
+
+[bot]
+# List of categories for which the bot should reply automatically.
+auto_reply_categories = ["new_user", "win_share", "positive_signal"]
+# List of categories that should trigger only suggestions.
+suggestion_only_categories = [
+  "voucher_question",
+  "support_issue",
+  "negative_sentiment",
+  "high_intent",
+]
+
+[responses]
+# Customize reply messages per category.
+new_user = "Welcome to the group! 🎉 Feel free to ask any questions."
+win_share = "Congratulations on your win! 🥳"
+positive_signal = "Thank you for your feedback! 😊"
+voucher_question = "It looks like you have a question about vouchers or promo codes. An admin will assist you shortly."
+support_issue = "Thanks for reporting the issue. One of our admins will look into it and get back to you soon."
+negative_sentiment = "We're sorry to hear that you're not satisfied. An admin will reach out to help resolve the issue."
+high_intent = "Great to see your enthusiasm! Our team will provide more information about rewards and affiliate opportunities soon."
+
+[reactions]
+# Customize emoji reactions per category.
+new_user = "👋"
+win_share = "🎉"
+positive_signal = "❤️"

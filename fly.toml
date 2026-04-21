@@ -1,0 +1,17 @@
+# fly.toml file for deploying the AI observer on Fly.io
+#
+# Replace `your-app-name` with the name of your Fly.io application.  This
+# configuration assumes a Dockerfile is present in the repository root.
+
+app = "your-app-name"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+
+# If you wish to mount volumes for persistent storage, uncomment and adjust:
+# [mounts]
+#   source = "data"
+#   destination = "/data"

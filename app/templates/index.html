@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Observer Admin</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>AI Observer Plugins</h1>
+      <div class="grid">
+        <div class="card">
+          <div class="icon">🏷️</div>
+          <div class="title">Tagging</div>
+          <div class="toggle">
+            <input type="checkbox" id="tagging" checked />
+            <label for="tagging">Enable</label>
+          </div>
+        </div>
+        <div class="card">
+          <div class="icon">💬</div>
+          <div class="title">Suggestions</div>
+          <div class="toggle">
+            <input type="checkbox" id="suggestions" checked />
+            <label for="suggestions">Enable</label>
+          </div>
+        </div>
+        <div class="card">
+          <div class="icon">🤖</div>
+          <div class="title">Auto Reaction</div>
+          <div class="toggle">
+            <input type="checkbox" id="auto_reaction" checked />
+            <label for="auto_reaction">Enable</label>
+          </div>
+        </div>
+        <div class="card">
+          <div class="icon">🔄</div>
+          <div class="title">Threaded Replies</div>
+          <div class="toggle">
+            <input type="checkbox" id="threaded" checked />
+            <label for="threaded">Enable</label>
+          </div>
+        </div>
+      </div>
+      <p class="note">
+        Changes made here are not persisted. In a production system, these toggles should
+        send a request to update the bot configuration.
+      </p>
+    </div>
+  </body>
+</html>
