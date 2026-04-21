@@ -12,6 +12,8 @@ behaviours.  It is designed to run on **Fly.io** and to store conversation logs 
   forwards it to a designated admin chat.
 - **Low‑risk auto response** – automatically replies and reacts to low‑risk messages such as
   welcome messages, congratulations and positive feedback.
+- **Auto-reply throttle** – suppresses repeated low-value auto-replies with category cooldowns,
+  per-user cooldowns, and near-duplicate text dedupe windows.
 - **Threaded replies** – replies are sent as a reply to the original message to keep the
   conversation thread neat.
 - **Admin UI** – a simple web interface to enable or disable features like tagging, suggestion and
@@ -82,6 +84,13 @@ GitHub secrets:
 | `ENABLE_SUGGESTIONS`| Enable admin suggestion forwarding (default: `true`). |
 | `ENABLE_LOW_RISK_AUTO_REPLY` | Enable low-risk auto replies (default: `true`). |
 | `ENABLE_THREADED_REPLIES` | Reply using Telegram threading (default: `true`). |
+| `ENABLE_AUTO_REPLY_THROTTLE` | Enable auto-reply anti-spam throttle (default: `true`). |
+| `AUTO_REPLY_NEW_USER_COOLDOWN_SECONDS` | Cooldown for `new_user` auto-replies per group (default: `120`). |
+| `AUTO_REPLY_POSITIVE_SIGNAL_COOLDOWN_SECONDS` | Cooldown for `positive_signal` auto-replies per group (default: `45`). |
+| `AUTO_REPLY_WIN_SHARE_COOLDOWN_SECONDS` | Cooldown for `win_share` auto-replies per group (default: `30`). |
+| `AUTO_REPLY_DEFAULT_CATEGORY_COOLDOWN_SECONDS` | Fallback cooldown for other auto-reply categories (default: `60`). |
+| `AUTO_REPLY_USER_COOLDOWN_SECONDS` | Cooldown for repeated auto-replies from the same user per group (default: `120`). |
+| `AUTO_REPLY_DUPLICATE_WINDOW_SECONDS` | Dedupe window for near-identical text per group (default: `180`). |
 | `FLY_API_TOKEN`     | Fly.io API token used by GitHub Actions.              |
 
 For Fly.io, set the secrets using `flyctl secrets set`:

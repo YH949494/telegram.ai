@@ -62,6 +62,19 @@
         </table>
       </section>
 
+      <section class="panel">
+        <h2>Auto Reply Throttle</h2>
+        <div class="toggle-list">
+          <div class="toggle-row"><span>Enabled</span><span class="badge">{{ 'enabled' if throttle_settings.enabled else 'disabled' }}</span></div>
+          <div class="toggle-row"><span>new_user cooldown</span><span class="badge">{{ throttle_settings.new_user_cooldown }}s</span></div>
+          <div class="toggle-row"><span>positive_signal cooldown</span><span class="badge">{{ throttle_settings.positive_signal_cooldown }}s</span></div>
+          <div class="toggle-row"><span>win_share cooldown</span><span class="badge">{{ throttle_settings.win_share_cooldown }}s</span></div>
+          <div class="toggle-row"><span>default category cooldown</span><span class="badge">{{ throttle_settings.default_category_cooldown }}s</span></div>
+          <div class="toggle-row"><span>User cooldown</span><span class="badge">{{ throttle_settings.user_cooldown }}s</span></div>
+          <div class="toggle-row"><span>Duplicate window</span><span class="badge">{{ throttle_settings.duplicate_window }}s</span></div>
+        </div>
+      </section>
+
       <p class="note">This dashboard is read-only in this build and is structured for future auth and write endpoints.</p>
     </div>
   </body>
