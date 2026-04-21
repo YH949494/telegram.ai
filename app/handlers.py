@@ -206,8 +206,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 kwargs = {}
                 if settings.enable_threaded_replies:
                     kwargs["reply_to_message_id"] = message.message_id
-                await message.reply_text(reaction, **kwargs)
-
+                await message.reply_text(
+                    reply_text,
+                    parse_mode="HTML",
+                    **kwargs
+                )
     log_message(
         category,
         update,
