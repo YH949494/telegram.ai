@@ -1,7 +1,7 @@
 import logging
 from types import SimpleNamespace
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
 try:
@@ -34,6 +34,21 @@ from .throttle import auto_reply_throttle
 
 logger = logging.getLogger(__name__)
 AUTO_REPLY_ALLOWED_CATEGORIES = {"new_user", "win_share", "positive_signal"}
+
+
+def _prepare_reply_payload(payload, allow_button: bool = False):
+    if isinstance(payload, dict):
+        reply_text = payload.get("text") or ""
+        reply_markup = None
+        if allow_button:
+            button_text = payload.get("button_text")
+            button_url = payload.get("button_url")
+            if button_text and button_url:
+                reply_markup = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton(text=button_text, url=button_url)]]
+                )
+        return reply_text, reply_markup
+    return payload or "", None
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -123,12 +138,23 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     category,
                     throttle_decision.normalized_text_hash,
                 )
-            reply_text = suggested_reply or generate_reply(category, text)
+            if suggested_reply:
+                reply_payload = suggested_reply
+                allow_button = False
+            else:
+                reply_payload = generate_reply(category, text)
+                allow_button = True
+            reply_text, reply_markup = _prepare_reply_payload(
+                reply_payload,
+                allow_button=allow_button,
+            )
             if reply_text:
                 logger.info("Auto reply triggered for message_id=%s category=%s", message.message_id, category)
                 kwargs = {}
                 if settings.enable_threaded_replies:
                     kwargs["reply_to_message_id"] = message.message_id
+                if reply_markup:
+                    kwargs["reply_markup"] = reply_markup
                 await message.reply_text(reply_text, **kwargs)
 
             reaction = get_reaction(category)
@@ -152,7 +178,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
     if action == "suggest_only" and settings.enable_suggestions:
-        suggestion = suggested_reply or generate_reply(category, text)
+        suggestion_payload = suggested_reply or generate_reply(category, text)
+        suggestion, _ = _prepare_reply_payload(suggestion_payload, allow_button=False)
         if suggestion and settings.admin_chat_id:
             logger.info("Suggestion forwarded for message_id=%s category=%s", message.message_id, category)
             admin_text = (
