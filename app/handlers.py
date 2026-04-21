@@ -1,14 +1,39 @@
 import logging
+from types import SimpleNamespace
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
-from .classifier import classify
+try:
+    from .classifier import classify_message
+except ImportError:
+    from .classifier import classify
+
+    def classify_message(text, settings):
+        category = classify(text)
+        if category in AUTO_REPLY_ALLOWED_CATEGORIES:
+            action = "auto_reply"
+            confidence = 0.8
+        elif category in settings.suggestion_only_categories:
+            action = "suggest_only"
+            confidence = 0.7
+        else:
+            action = "ignore"
+            confidence = 0.4
+        return SimpleNamespace(
+            category=category,
+            action=action,
+            confidence=confidence,
+            suggested_reply="",
+            reason="rule_fallback",
+        )
 from .config import get_settings
 from .db import log_message
 from .responses import generate_reply, get_reaction
+from .throttle import auto_reply_throttle
 
 logger = logging.getLogger(__name__)
+AUTO_REPLY_ALLOWED_CATEGORIES = {"new_user", "win_share", "positive_signal"}
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -30,29 +55,104 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.info("Tagging disabled; skipping classification")
         return
 
-    category = classify(text)
-    logger.info("Classified message_id=%s category=%s", message.message_id, category)
+    decision = classify_message(text, settings)
+    category = getattr(decision, "category", "unknown")
+    raw_action = getattr(decision, "action", "ignore")
+    confidence = float(getattr(decision, "confidence", 0.0) or 0.0)
+    suggested_reply = getattr(decision, "suggested_reply", "") or ""
+    decision_reason = getattr(decision, "reason", "")
 
-    log_message(category, update)
+    if confidence < 0.5:
+        action = "ignore"
+    elif confidence < 0.75:
+        action = "suggest_only"
+    else:
+        action = raw_action
 
-    if category in settings.auto_reply_categories and settings.enable_low_risk_auto_reply:
-        reply_text = generate_reply(category, text)
-        if reply_text:
-            logger.info("Auto reply triggered for message_id=%s category=%s", message.message_id, category)
-            kwargs = {}
-            if settings.enable_threaded_replies:
-                kwargs["reply_to_message_id"] = message.message_id
-            await message.reply_text(reply_text, **kwargs)
+    if action == "auto_reply" and category not in AUTO_REPLY_ALLOWED_CATEGORIES:
+        action = "ignore"
 
-        reaction = get_reaction(category)
-        if reaction:
-            kwargs = {}
-            if settings.enable_threaded_replies:
-                kwargs["reply_to_message_id"] = message.message_id
-            await message.reply_text(reaction, **kwargs)
+    logger.info(
+        "Classified message_id=%s category=%s action=%s confidence=%s",
+        message.message_id,
+        category,
+        action,
+        confidence,
+    )
 
-    if category in settings.suggestion_only_categories and settings.enable_suggestions:
-        suggestion = generate_reply(category, text)
+    throttle_blocked = False
+    throttle_reason = "none"
+
+    if action == "auto_reply" and settings.enable_low_risk_auto_reply:
+        user_id = message.from_user.id if message.from_user else 0
+        try:
+            throttle_decision = auto_reply_throttle.evaluate_auto_reply_throttle(
+                chat_id=message.chat_id,
+                user_id=user_id,
+                category=category,
+                text=text,
+                settings=settings,
+            )
+        except Exception:
+            logger.exception(
+                "Auto-reply throttle evaluation failed; allowing reply message_id=%s category=%s",
+                message.message_id,
+                category,
+            )
+            throttle_decision = None
+
+        if throttle_decision and not throttle_decision.allowed:
+            throttle_blocked = True
+            throttle_reason = throttle_decision.reason
+            action = "ignore"
+            logger.info(
+                "Auto reply blocked message_id=%s chat_id=%s user_id=%s reason=%s normalized_hash=%s",
+                message.message_id,
+                message.chat_id,
+                user_id,
+                throttle_decision.reason,
+                throttle_decision.normalized_text_hash,
+            )
+        else:
+            if throttle_decision:
+                logger.info(
+                    "Auto reply allowed message_id=%s chat_id=%s user_id=%s category=%s normalized_hash=%s",
+                    message.message_id,
+                    message.chat_id,
+                    user_id,
+                    category,
+                    throttle_decision.normalized_text_hash,
+                )
+            reply_text = suggested_reply or generate_reply(category, text)
+            if reply_text:
+                logger.info("Auto reply triggered for message_id=%s category=%s", message.message_id, category)
+                kwargs = {}
+                if settings.enable_threaded_replies:
+                    kwargs["reply_to_message_id"] = message.message_id
+                await message.reply_text(reply_text, **kwargs)
+
+            reaction = get_reaction(category)
+            if reaction:
+                kwargs = {}
+                if settings.enable_threaded_replies:
+                    kwargs["reply_to_message_id"] = message.message_id
+                await message.reply_text(reaction, **kwargs)
+
+    log_message(
+        category,
+        update,
+        decision={
+            "category": category,
+            "action": action,
+            "confidence": confidence,
+            "reason": decision_reason,
+        },
+        throttle_blocked=throttle_blocked,
+        throttle_reason=throttle_reason,
+    )
+
+    if action == "suggest_only" and settings.enable_suggestions:
+        suggestion = suggested_reply or generate_reply(category, text)
         if suggestion and settings.admin_chat_id:
             logger.info("Suggestion forwarded for message_id=%s category=%s", message.message_id, category)
             admin_text = (

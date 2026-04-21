@@ -82,6 +82,15 @@ async def read_root(request: Request):
         "mongodb_db": settings.mongodb_db,
         "mongodb_collection": settings.mongodb_collection,
     }
+    throttle_settings = {
+        "enabled": settings.enable_auto_reply_throttle,
+        "new_user_cooldown": settings.auto_reply_new_user_cooldown_seconds,
+        "positive_signal_cooldown": settings.auto_reply_positive_signal_cooldown_seconds,
+        "win_share_cooldown": settings.auto_reply_win_share_cooldown_seconds,
+        "default_category_cooldown": settings.auto_reply_default_category_cooldown_seconds,
+        "user_cooldown": settings.auto_reply_user_cooldown_seconds,
+        "duplicate_window": settings.auto_reply_duplicate_window_seconds,
+    }
     return templates.TemplateResponse(
         "index.html",
         {
@@ -89,6 +98,7 @@ async def read_root(request: Request):
             "feature_flags": feature_flags,
             "mode_by_category": mode_by_category,
             "system_status": system_status,
+            "throttle_settings": throttle_settings,
         },
     )
 

@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
@@ -21,7 +21,13 @@ def get_db():
     return _client[settings.mongodb_db]
 
 
-def log_message(category: str, update) -> None:
+def log_message(
+    category: str,
+    update,
+    decision: Optional[Dict[str, Any]] = None,
+    throttle_blocked: bool = False,
+    throttle_reason: str = "none",
+) -> None:
     try:
         db = get_db()
         settings = get_settings()
@@ -36,6 +42,9 @@ def log_message(category: str, update) -> None:
             "username": message.from_user.username if message.from_user else None,
             "text": message.text,
             "category": category,
+            "decision": decision or {},
+            "throttle_blocked": throttle_blocked,
+            "throttle_reason": throttle_reason,
             "date": message.date or datetime.utcnow(),
         }
         collection.insert_one(doc)
