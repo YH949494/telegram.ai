@@ -3,7 +3,7 @@
 # Replace `your-app-name` with the name of your Fly.io application.  This
 # configuration assumes a Dockerfile is present in the repository root.
 
-app = "your-app-name"
+app = "telegram.ai"
 
 [build]
   dockerfile = "Dockerfile"
