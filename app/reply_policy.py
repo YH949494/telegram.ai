@@ -21,13 +21,13 @@ SEED_REPLIES: Dict[str, List[SeedItem]] = {
         SeedItem(key="win_share_3", text="Great result, well played.", tone="celebratory", reply_goal="celebrate", allowed_contexts=("group",)),
     ],
     "support_issue": [
-        SeedItem(key="support_1", text="Thanks for reporting this. Please share your UID and issue details for faster help.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
-        SeedItem(key="support_2", text="Got it. Please send UID + screenshot so support can check.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
-        SeedItem(key="support_3", text="Understood — drop your UID and error details, support will review.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="support_1", text="Thanks for reporting this. We will look into this and come back to you asap.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="support_2", text="Got it. Let us look into this right now", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="support_3", text="Understood — let us review and come back to you at soonest", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
     ],
     "voucher_question": [
-        SeedItem(key="voucher_1", text="Please share the voucher code and what error you see so support can check.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
-        SeedItem(key="voucher_2", text="Got it. Send code + screenshot and support can verify quickly.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="voucher_1", text="Please share with us your concern so we can assist.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="voucher_2", text="Got it. What's the error you facing?", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
     ],
     "positive_signal": [
         SeedItem(key="positive_1", text="Thanks for sharing that 🙌", tone="upbeat", reply_goal="encourage", allowed_contexts=("group",)),
