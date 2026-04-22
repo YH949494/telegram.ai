@@ -32,7 +32,7 @@ CATEGORIES: Dict[str, List[str]] = {
     ],
     "win_share": [
         r"\bwin\b",
-        r"\bwon\b",
+        r"\bwon\s+\d+(?:\.\d+)?(?:x)?\b",
         r"中奖了",
         r"获奖",
         r"晒.*(赢|中奖)",
@@ -74,6 +74,55 @@ CATEGORIES: Dict[str, List[str]] = {
     ],
 }
 
+WIN_SHARE_NEGATIVE_PATTERNS: List[str] = [
+    r"daily\s+recommendation",
+    r"\brecommend(?:ed|ation)?\b",
+    r"recommend\s+only",
+    r"max\s+win",
+    r"med\s*max",
+    r"this\s+game\s+has",
+]
+
+WIN_SHARE_POSITIVE_PATTERNS: List[str] = [
+    r"\bi\s+won\b",
+    r"\bmy\s+win\b",
+    r"\bi\s+got\b",
+    r"\bi\s+hit\b",
+    r"\bcash\s*out\b",
+    r"\bcashed\s*out\b",
+    r"\bwon\s+\d+(?:\.\d+)?(?:x)?\b",
+    r"\bwon\s+(?:big|huge|jackpot)\b",
+    r"\bwithdrew\b",
+    r"\bwithdrawn\b",
+    r"晒.*(赢|中奖)",
+    r"中奖了",
+    r"获奖",
+]
+
+WIN_SHARE_WEAK_POSITIVE_PATTERNS: List[str] = [
+    r"\b\d+(?:\.\d+)?x\s+win\b",
+    r"\b(?:big|nice)\s+win\b",
+    r"\bfinally\s+hit\s+bonus\b",
+    r"\bjackpot\b",
+    r"\bfull\s*screen\b",
+    r"\bcash\s*out\b",
+    r"\bcashed\s*out\b",
+]
+
+def is_win_share(text: str) -> bool:
+    if any(
+        re.search(pattern, text, flags=re.IGNORECASE)
+        for pattern in WIN_SHARE_NEGATIVE_PATTERNS
+    ):
+        return False
+    return any(
+        re.search(pattern, text, flags=re.IGNORECASE)
+        for pattern in WIN_SHARE_POSITIVE_PATTERNS
+    ) or any(
+        re.search(pattern, text, flags=re.IGNORECASE)
+        for pattern in WIN_SHARE_WEAK_POSITIVE_PATTERNS
+    )
+
 
 def classify(text: str) -> str:
     """
@@ -84,6 +133,10 @@ def classify(text: str) -> str:
     """
     text_lower = (text or "").lower()
     for category, patterns in CATEGORIES.items():
+        if category == "win_share":
+            if is_win_share(text_lower):
+                return category
+            continue
         for pattern in patterns:
             if re.search(pattern, text_lower, flags=re.IGNORECASE):
                 return category
