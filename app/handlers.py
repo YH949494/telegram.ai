@@ -1,4 +1,5 @@
 import logging
+import re
 from types import SimpleNamespace
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji, Update
@@ -27,13 +28,25 @@ except ImportError:
             suggested_reply="",
             reason="rule_fallback",
         )
+
+from .ai_decision import AIDecisionService
+from .ai_budget import ai_budget_service
+from .ai_reply import AIReplyService
 from .config import get_settings
 from .db import log_message
+from .openai_client import OpenAIClient
+from .reply_policy import ReplyPolicyService
 from .responses import generate_reply
+from .seed_rotation import seed_rotation_service
 from .throttle import auto_reply_throttle
 
 logger = logging.getLogger(__name__)
 AUTO_REPLY_ALLOWED_CATEGORIES = {"new_user", "win_share", "positive_signal"}
+_ai_runtime = None
+RECOMMENDATION_PATTERNS = [r"\brecommend(?:ed|ation)?\b", r"max\s*win", r"this\s+game\s+has", r"daily\s+recommendation", r"推荐", r"建议"]
+RESULT_PATTERNS = [r"\bi\s+won\b", r"\bmy\s+win\b", r"\bcashed?\s*out\b", r"\bjackpot\b", r"\bwon\s+\d+(?:\.\d+)?x?\b", r"中奖", r"赢了"]
+SUPPORT_PATTERNS = [r"\bvoucher\b", r"\bpromo\b", r"\bissue\b", r"\berror\b", r"\bcan't\b", r"无法", r"失败"]
+NEW_USER_PATTERNS = [r"\bnew\b", r"just\s+joined", r"新人", r"新来的"]
 
 
 def _prepare_reply_payload(payload, allow_button: bool = False):
@@ -76,19 +89,95 @@ async def safe_add_reaction(
         )
 
 
+def _build_ai_services(settings):
+    client = OpenAIClient(api_key=settings.openai_api_key)
+    return (
+        client,
+        AIDecisionService(client=client, model=settings.openai_decision_model),
+        AIReplyService(client=client, model=settings.openai_generation_model),
+        ReplyPolicyService(
+            confidence_threshold=settings.ai_decision_confidence_threshold,
+            generation_allowed_categories=settings.ai_generation_allowed_categories,
+            seed_only_categories=settings.ai_seed_only_categories,
+        ),
+    )
+
+
+def _get_ai_runtime(settings):
+    global _ai_runtime
+    if _ai_runtime is not None:
+        return _ai_runtime
+    if not settings.enable_ai_decision or not settings.openai_api_key:
+        return None
+    _ai_runtime = _build_ai_services(settings)
+    return _ai_runtime
+
+
+def _detect_text_features(text: str):
+    lowered = (text or "").lower()
+    has_recommendation = any(re.search(pattern, lowered, flags=re.IGNORECASE) for pattern in RECOMMENDATION_PATTERNS)
+    has_result = any(re.search(pattern, lowered, flags=re.IGNORECASE) for pattern in RESULT_PATTERNS)
+    has_support = any(re.search(pattern, lowered, flags=re.IGNORECASE) for pattern in SUPPORT_PATTERNS)
+    has_new_user = any(re.search(pattern, lowered, flags=re.IGNORECASE) for pattern in NEW_USER_PATTERNS)
+    return {
+        "has_recommendation": has_recommendation,
+        "has_result": has_result,
+        "has_support": has_support,
+        "has_new_user": has_new_user,
+        "mixed_signal": has_recommendation and has_result,
+    }
+
+
+def has_mixed_intent(text: str) -> bool:
+    return bool(_detect_text_features(text)["mixed_signal"])
+
+
+def should_run_ai_decision(*, settings, text: str, rule_category: str, rule_confidence: float) -> bool:
+    if not settings.enable_ai_decision or not settings.openai_api_key:
+        return False
+    if rule_category == "unknown":
+        return True
+    if rule_category in {"new_user", "voucher_question", "support_issue"} and rule_confidence >= 0.9:
+        return False
+    features = _detect_text_features(text)
+    if rule_category == "win_share" and features["mixed_signal"]:
+        return True
+    if rule_confidence < settings.ai_rule_threshold:
+        return True
+    if rule_category in set(settings.ai_ambiguous_categories):
+        return True
+    return False
+
+
+def _should_run_ai_decision(*, settings, category: str, confidence: float, text: str) -> bool:
+    return should_run_ai_decision(
+        settings=settings,
+        text=text,
+        rule_category=category,
+        rule_confidence=confidence,
+    )
+
+
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
-    if not message or not message.text:
+    if message is None:
+        return
+    if not getattr(message, "text", None):
+        return
+    if message.from_user and message.from_user.is_bot:
+        return
+    if context.bot and message.from_user and context.bot.id == message.from_user.id:
         return
 
     settings = get_settings()
     text = message.text
 
     logger.info(
-        "Received message chat_id=%s message_id=%s user_id=%s",
+        "Received message chat_id=%s message_id=%s user_id=%s snippet=%s",
         message.chat_id,
         message.message_id,
         message.from_user.id if message.from_user else None,
+        text[:80],
     )
 
     if not settings.enable_tagging:
@@ -112,12 +201,158 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if action == "auto_reply" and category not in AUTO_REPLY_ALLOWED_CATEGORIES:
         action = "ignore"
 
+    # Stage 2 AI decision only for ambiguous/non-deterministic path.
+    ai_path_used = False
+    path_used = "deterministic"
+    budget_state = "none"
+    moderation_state = "none"
+    reply_sent = False
+    downgrade_applied = False
+    category_before = category
+    if should_run_ai_decision(settings=settings, text=text, rule_category=category, rule_confidence=confidence):
+        ai_path_used = True
+        try:
+            runtime = _get_ai_runtime(settings)
+            if runtime is None:
+                raise RuntimeError("ai_runtime_unavailable")
+            client, ai_decision_service, ai_reply_service, reply_policy = runtime
+            priority = category in set(settings.ai_priority_categories)
+            decision_budget = ai_budget_service.allow_decision(
+                chat_id=message.chat_id,
+                max_per_minute=settings.ai_max_decisions_per_minute,
+                max_per_chat_per_hour=settings.ai_max_decisions_per_chat_per_hour,
+                priority=priority,
+            )
+            budget_state = decision_budget.state
+            if not decision_budget.allowed:
+                decision_reason = f"ai_decision_skipped_due_to_budget:{decision_budget.reason}"
+                action = "ignore" if not priority else action
+                raise RuntimeError("ai_decision_budget_block")
+
+            ai_decision = ai_decision_service.decide(text)
+            policy = reply_policy.evaluate(ai_decision)
+            decision_reason = f"ai:{policy.reason}"
+            category = ai_decision.category
+            confidence = ai_decision.confidence
+            action = "auto_reply" if policy.should_send else "ignore"
+            suggested_reply = ""
+            path_used = policy.mode
+            if action == "ignore":
+                logger.info("ai_no_reply_due_to_policy message_id=%s reason=%s", message.message_id, policy.reason)
+
+            if policy.should_send and settings.enable_ai_moderation:
+                moderation_input = client.moderate(text)
+                if moderation_input:
+                    action = "ignore"
+                    decision_reason = "ai:moderation_input_block"
+                    moderation_state = "input_blocked"
+                    logger.info("ai_blocked_by_moderation message_id=%s", message.message_id)
+                else:
+                    moderation_state = "input_ok"
+
+            selected_seed = None
+            if policy.seed_candidates:
+                selected_seed = seed_rotation_service.pick_seed(
+                    chat_id=message.chat_id,
+                    category=policy.category,
+                    seeds=policy.seed_candidates,
+                    repeat_window_seconds=settings.ai_seed_repeat_window_seconds,
+                    max_seed_reuse_per_window=settings.ai_max_seed_reuse_per_window,
+                )
+                policy.selected_seed = selected_seed
+
+            generation_allowed = (
+                action == "auto_reply"
+                and policy.should_send
+                and policy.mode == "rewrite"
+                and settings.enable_ai_generation
+                and settings.ai_generation_rewrite_mode
+                and selected_seed is not None
+            )
+            if generation_allowed:
+                generation_budget = ai_budget_service.allow_generation(
+                    max_per_minute=settings.ai_max_generations_per_minute,
+                    allow_downgrade=settings.ai_enable_budget_downgrade,
+                    priority=priority,
+                )
+                budget_state = generation_budget.state
+                if generation_budget.state == "downgrade":
+                    suggested_reply = selected_seed.text
+                    decision_reason = "ai_generation_downgraded_to_seed"
+                    path_used = "seed"
+                    downgrade_applied = True
+                    logger.info("ai_generation_downgraded_to_seed message_id=%s", message.message_id)
+                elif not generation_budget.allowed:
+                    action = "ignore"
+                    decision_reason = f"ai_generation_blocked_due_to_budget:{generation_budget.reason}"
+                else:
+                    if len((selected_seed.text or "").strip()) < 16:
+                        suggested_reply = selected_seed.text
+                        path_used = "seed"
+                        downgrade_applied = True
+                        decision_reason = "ai_generation_short_seed_fallback_to_seed"
+                    else:
+                        try:
+                            ai_reply = ai_reply_service.generate(
+                                decision=ai_decision,
+                                user_text=text,
+                                seed_text=selected_seed.text,
+                                max_chars=settings.ai_max_reply_chars,
+                            )
+                        except Exception:
+                            logger.exception("AI rewrite generation failed; falling back to seed message_id=%s", message.message_id)
+                            suggested_reply = selected_seed.text
+                            path_used = "seed"
+                            downgrade_applied = True
+                            decision_reason = "ai_generation_error_fallback_to_seed"
+                        else:
+                            if ai_reply:
+                                if settings.enable_ai_moderation:
+                                    moderation_reply = client.moderate(ai_reply)
+                                    if moderation_reply:
+                                        action = "ignore"
+                                        decision_reason = "ai:moderation_reply_block"
+                                        moderation_state = "output_blocked"
+                                        logger.info("ai_blocked_by_moderation message_id=%s", message.message_id)
+                                    else:
+                                        suggested_reply = ai_reply
+                                        moderation_state = "output_ok"
+                                        path_used = "rewrite"
+                                else:
+                                    suggested_reply = ai_reply
+                                    path_used = "rewrite"
+                            else:
+                                suggested_reply = selected_seed.text
+                                path_used = "seed"
+                                downgrade_applied = True
+                                decision_reason = "ai_generation_empty_fallback_to_seed"
+            elif action == "auto_reply" and selected_seed is not None:
+                suggested_reply = selected_seed.text
+                path_used = "seed"
+
+            if action == "auto_reply" and selected_seed is not None and settings.enable_seed_rotation_memory:
+                seed_rotation_service.mark_used(
+                    chat_id=message.chat_id,
+                    category=policy.category,
+                    seed_key=selected_seed.key,
+                )
+        except Exception:
+            if decision_reason.startswith("ai_decision_skipped_due_to_budget"):
+                logger.info("ai_decision_skipped_due_to_budget message_id=%s", message.message_id)
+            else:
+                action = "ignore"
+                decision_reason = "ai_failure"
+                logger.exception("AI decision/generation failed message_id=%s", message.message_id)
+
     logger.info(
-        "Classified message_id=%s category=%s action=%s confidence=%s",
+        "Classified message_id=%s category=%s action=%s confidence=%s path=%s budget_state=%s moderation_state=%s",
         message.message_id,
         category,
         action,
         confidence,
+        path_used if ai_path_used else "deterministic",
+        budget_state,
+        moderation_state,
     )
 
     throttle_blocked = False
@@ -202,6 +437,13 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 if category == "new_user":
                     kwargs["parse_mode"] = "HTML"
                 await message.reply_text(reply_text, **kwargs)
+                reply_sent = True
+                if path_used == "seed":
+                    logger.info("seed_reply_sent message_id=%s category=%s", message.message_id, category)
+                if path_used == "rewrite":
+                    logger.info("ai_rewritten_reply_sent message_id=%s category=%s", message.message_id, category)
+                if path_used == "deterministic":
+                    logger.info("deterministic_reply_sent message_id=%s category=%s", message.message_id, category)
     log_message(
         category,
         update,
@@ -210,6 +452,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "action": action,
             "confidence": confidence,
             "reason": decision_reason,
+            "path": path_used if ai_path_used else "deterministic",
+            "category_before": category_before,
+            "category_after": category,
+            "ai_used": ai_path_used,
+            "budget_state": budget_state,
+            "moderation_state": moderation_state,
+            "reply_sent": reply_sent,
+            "downgrade_applied": downgrade_applied,
         },
         throttle_blocked=throttle_blocked,
         throttle_reason=throttle_reason,
@@ -232,6 +482,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 def setup_application():
     settings = get_settings()
+    _get_ai_runtime(settings)
     application = ApplicationBuilder().token(settings.telegram_token).build()
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message_handler))
     return application

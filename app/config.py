@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Optional, Set
+from typing import List, Optional, Set
 
 from pydantic import BaseSettings, Field, validator
 
@@ -17,6 +17,40 @@ class Settings(BaseSettings):
     enable_low_risk_auto_reply: bool = Field(True, env="ENABLE_LOW_RISK_AUTO_REPLY")
     enable_threaded_replies: bool = Field(True, env="ENABLE_THREADED_REPLIES")
     enable_auto_reply_throttle: bool = Field(True, env="ENABLE_AUTO_REPLY_THROTTLE")
+
+    openai_api_key: Optional[str] = Field(None, env="OPENAI_API_KEY")
+    openai_decision_model: str = Field("gpt-4.1-mini", env="OPENAI_DECISION_MODEL")
+    openai_generation_model: str = Field("gpt-4.1-mini", env="OPENAI_GENERATION_MODEL")
+    enable_ai_decision: bool = Field(False, env="ENABLE_AI_DECISION")
+    enable_ai_generation: bool = Field(False, env="ENABLE_AI_GENERATION")
+    enable_ai_moderation: bool = Field(True, env="ENABLE_AI_MODERATION")
+    ai_decision_confidence_threshold: float = Field(0.82, env="AI_DECISION_CONFIDENCE_THRESHOLD")
+    ai_rule_threshold: float = Field(0.88, env="AI_RULE_THRESHOLD")
+    ai_ambiguous_categories: List[str] = Field(
+        default_factory=lambda: ["win_share", "positive_signal", "unknown"],
+        env="AI_AMBIGUOUS_CATEGORIES",
+    )
+    ai_max_reply_chars: int = Field(220, env="AI_MAX_REPLY_CHARS")
+    ai_seed_repeat_window_seconds: int = Field(300, env="AI_SEED_REPEAT_WINDOW_SECONDS")
+    ai_generation_rewrite_mode: bool = Field(True, env="AI_GENERATION_REWRITE_MODE")
+    ai_max_seed_reuse_per_window: int = Field(1, env="AI_MAX_SEED_REUSE_PER_WINDOW")
+    enable_seed_rotation_memory: bool = Field(True, env="ENABLE_SEED_ROTATION_MEMORY")
+    ai_max_decisions_per_minute: int = Field(30, env="AI_MAX_DECISIONS_PER_MINUTE")
+    ai_max_generations_per_minute: int = Field(10, env="AI_MAX_GENERATIONS_PER_MINUTE")
+    ai_max_decisions_per_chat_per_hour: int = Field(120, env="AI_MAX_DECISIONS_PER_CHAT_PER_HOUR")
+    ai_enable_budget_downgrade: bool = Field(True, env="AI_ENABLE_BUDGET_DOWNGRADE")
+    ai_generation_allowed_categories: List[str] = Field(
+        default_factory=lambda: ["win_share", "new_user"],
+        env="AI_GENERATION_ALLOWED_CATEGORIES",
+    )
+    ai_seed_only_categories: List[str] = Field(
+        default_factory=lambda: ["support_issue", "voucher_question"],
+        env="AI_SEED_ONLY_CATEGORIES",
+    )
+    ai_priority_categories: List[str] = Field(
+        default_factory=lambda: ["new_user", "support_issue", "voucher_question", "win_share"],
+        env="AI_PRIORITY_CATEGORIES",
+    )
     auto_reply_new_user_cooldown_seconds: int = Field(120, env="AUTO_REPLY_NEW_USER_COOLDOWN_SECONDS")
     auto_reply_positive_signal_cooldown_seconds: int = Field(
         45, env="AUTO_REPLY_POSITIVE_SIGNAL_COOLDOWN_SECONDS"
@@ -57,6 +91,25 @@ class Settings(BaseSettings):
     def cooldown_must_be_non_negative(cls, value: int, field):
         if value < 0:
             raise ValueError(f"{field.name} must be >= 0")
+        return value
+
+
+    @validator("ai_decision_confidence_threshold")
+    def ai_threshold_in_range(cls, value: float):
+        if value < 0.0 or value > 1.0:
+            raise ValueError("ai_decision_confidence_threshold must be between 0 and 1")
+        return value
+
+    @validator("ai_rule_threshold")
+    def ai_rule_threshold_in_range(cls, value: float):
+        if value < 0.0 or value > 1.0:
+            raise ValueError("ai_rule_threshold must be between 0 and 1")
+        return value
+
+    @validator("ai_max_reply_chars")
+    def ai_max_reply_chars_positive(cls, value: int):
+        if value <= 0:
+            raise ValueError("ai_max_reply_chars must be > 0")
         return value
 
     class Config:
