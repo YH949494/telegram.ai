@@ -29,7 +29,7 @@ except ImportError:
         )
 from .config import get_settings
 from .db import log_message
-from .responses import generate_reply, get_reaction
+from .responses import generate_reply
 from .throttle import auto_reply_throttle
 
 logger = logging.getLogger(__name__)
@@ -199,18 +199,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     kwargs["reply_to_message_id"] = message.message_id
                 if reply_markup:
                     kwargs["reply_markup"] = reply_markup
+                if category == "new_user":
+                    kwargs["parse_mode"] = "HTML"
                 await message.reply_text(reply_text, **kwargs)
-
-            reaction = get_reaction(category)
-            if reaction:
-                kwargs = {}
-                if settings.enable_threaded_replies:
-                    kwargs["reply_to_message_id"] = message.message_id
-                await message.reply_text(
-                    reply_text,
-                    parse_mode="HTML",
-                    **kwargs
-                )
     log_message(
         category,
         update,
