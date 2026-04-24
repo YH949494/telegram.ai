@@ -17,6 +17,7 @@ SEED_REPLIES: Dict[str, List[SeedItem]] = {
         SeedItem(key="new_user_4", text="Welcome! Great to see new faces around here 😊", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
         SeedItem(key="new_user_5", text="Good to have you with us. Lots going on — stay tuned.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
         SeedItem(key="new_user_6", text="Hey, welcome aboard! Feel free to explore and ask if you need anything.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_7", text="Welcome to the group! 🎉\n\n<b>Surprise voucher drops can happen anytime.</b>\n\nMake sure you turn on notifications for @advantplayofficial so you don't miss the next one! 💵", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
     ],
     "win_share": [
         SeedItem(key="win_share_1", text="Nice hit, congrats 🔥", tone="celebratory", reply_goal="celebrate", allowed_contexts=("group",)),
