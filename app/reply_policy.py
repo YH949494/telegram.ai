@@ -14,24 +14,36 @@ SEED_REPLIES: Dict[str, List[SeedItem]] = {
         SeedItem(key="new_user_1", text="Welcome in 👋 Glad to have you here.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
         SeedItem(key="new_user_2", text="Hey, welcome to the community. Check the pinned info when you can.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
         SeedItem(key="new_user_3", text="Nice to have you here. Stay tuned for updates in channel.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_4", text="Welcome! Great to see new faces around here 😊", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_5", text="Good to have you with us. Lots going on — stay tuned.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_6", text="Hey, welcome aboard! Feel free to explore and ask if you need anything.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
     ],
     "win_share": [
         SeedItem(key="win_share_1", text="Nice hit, congrats 🔥", tone="celebratory", reply_goal="celebrate", allowed_contexts=("group",)),
         SeedItem(key="win_share_2", text="Big win energy, congrats 🎉", tone="celebratory", reply_goal="celebrate", allowed_contexts=("group",)),
         SeedItem(key="win_share_3", text="Great result, well played.", tone="celebratory", reply_goal="celebrate", allowed_contexts=("group",)),
+        SeedItem(key="win_share_4", text="That's a solid win! Well done 💪", tone="celebratory", reply_goal="celebrate", allowed_contexts=("group",)),
+        SeedItem(key="win_share_5", text="Love to see it! Keep that momentum going 🎯", tone="celebratory", reply_goal="celebrate", allowed_contexts=("group",)),
+        SeedItem(key="win_share_6", text="Nice one! Great stuff.", tone="celebratory", reply_goal="celebrate", allowed_contexts=("group",)),
     ],
     "support_issue": [
         SeedItem(key="support_1", text="Thanks for reporting this. We will look into this and come back to you asap.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
-        SeedItem(key="support_2", text="Got it. Let us look into this right now", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
-        SeedItem(key="support_3", text="Understood — let us review and come back to you at soonest", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="support_2", text="Got it. Let us look into this right now.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="support_3", text="Understood — let us review and come back to you at soonest.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="support_4", text="Noted, we're on it. Will update you shortly.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="support_5", text="Thanks for flagging this. Our team will check and follow up with you.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
     ],
     "voucher_question": [
         SeedItem(key="voucher_1", text="Please share with us your concern so we can assist.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
         SeedItem(key="voucher_2", text="Got it. What's the error you facing?", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="voucher_3", text="Sure, tell us more and we'll help sort it out.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="voucher_4", text="Happy to help — what exactly is happening on your end?", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
     ],
     "positive_signal": [
         SeedItem(key="positive_1", text="Thanks for sharing that 🙌", tone="upbeat", reply_goal="encourage", allowed_contexts=("group",)),
         SeedItem(key="positive_2", text="Appreciate the kind words.", tone="upbeat", reply_goal="encourage", allowed_contexts=("group",)),
+        SeedItem(key="positive_3", text="Glad you're enjoying it 😊", tone="upbeat", reply_goal="encourage", allowed_contexts=("group",)),
+        SeedItem(key="positive_4", text="Good to hear! Thanks for being part of the community.", tone="upbeat", reply_goal="encourage", allowed_contexts=("group",)),
     ],
 }
 
