@@ -11,13 +11,13 @@ ReplyMode = Literal["none", "deterministic", "seed", "rewrite"]
 
 SEED_REPLIES: Dict[str, List[SeedItem]] = {
     "new_user": [
-        SeedItem(key="new_user_1", text="Welcome in 👋 Glad to have you here.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
-        SeedItem(key="new_user_2", text="Hey, welcome to the community. Check the pinned info when you can.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
-        SeedItem(key="new_user_3", text="Nice to have you here. Stay tuned for updates in channel.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
-        SeedItem(key="new_user_4", text="Welcome! Great to see new faces around here 😊", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
-        SeedItem(key="new_user_5", text="Good to have you with us. Lots going on — stay tuned.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
-        SeedItem(key="new_user_6", text="Hey, welcome aboard! Feel free to explore and ask if you need anything.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
-        SeedItem(key="new_user_7", text="Welcome to the group! 🎉\n\n<b>Surprise voucher drops can happen anytime.</b>\n\nMake sure you turn on notifications for @advantplayofficial so you don't miss the next one! 💵", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_1", text="Welcome in 👋 Glad to have you here.\n\nVoucher drops may show up anytime — keep an eye out!\n\nTurn on notifications for @advantplayofficial so you don't miss the next one 🔔", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_2", text="Welcome to the group! 🎉\n\n<b>Surprise voucher drops can happen anytime.</b>\n\nMake sure you turn on notifications for @advantplayofficial so you don't miss the next one! 💵", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_3", text="Hey, welcome aboard! 👋\n\nVoucher drops happen regularly here — you won't want to miss them.\n\nFollow @advantplayofficial and turn on notifications to stay in the loop 🔔", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_4", text="Great to have you with us! 😊\n\nVouchers can drop at any time, so stay alert!\n\nTurn on notifications for @advantplayofficial to catch every drop 💰", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_5", text="Welcome! Nice to see new faces here.\n\nVoucher drops can happen anytime — don't miss out!\n\nMake sure notifications are on for @advantplayofficial 🔔", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_6", text="Glad you joined! 🎉\n\nKeep an eye out — voucher drops can show up anytime.\n\nSubscribe to @advantplayofficial with notifications on so you never miss a drop 💵", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="new_user_7", text="Welcome to the community! 👋\n\nVouchers may drop anytime — be ready!\n\nTurn on notifications for @advantplayofficial and never miss out 🔔", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
     ],
     "win_share": [
         SeedItem(key="win_share_1", text="Nice hit, congrats 🔥", tone="celebratory", reply_goal="celebrate", allowed_contexts=("group",)),
