@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     ai_max_decisions_per_chat_per_hour: int = Field(120, env="AI_MAX_DECISIONS_PER_CHAT_PER_HOUR")
     ai_enable_budget_downgrade: bool = Field(True, env="AI_ENABLE_BUDGET_DOWNGRADE")
     ai_generation_allowed_categories: List[str] = Field(
-        default_factory=lambda: ["win_share", "new_user"],
+        default_factory=lambda: ["win_share", "new_user", "positive_signal"],
         env="AI_GENERATION_ALLOWED_CATEGORIES",
     )
     ai_seed_only_categories: List[str] = Field(

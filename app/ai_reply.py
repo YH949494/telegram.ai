@@ -30,10 +30,11 @@ class AIReplyService:
             max_chars=max_chars,
         )
         instructions = (
-            "Rewrite this reply with slight variation. Keep meaning identical. Do not add new info. "
-            "Output plain text only, max 2 short lines. "
-            "Do not invent rewards, policies, facts, or outcomes. Do not mention being an AI. "
-            "Keep close to the seed and avoid high deviation."
+            "Rewrite this seed reply with natural variation in wording and sentence structure. "
+            "Keep the same intent — do not add new facts, rewards, policies, or outcomes. "
+            "You may lightly reflect the user's message context to feel more personal, but do not invent details. "
+            "Output plain text only, max 2 short lines. Do not mention being an AI. "
+            "The reply should feel fresh and human, not a near-copy of the seed."
         )
         reply = self.client.generate_reply(
             model=self.model,
