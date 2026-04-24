@@ -44,11 +44,11 @@ class Settings(BaseSettings):
         env="AI_GENERATION_ALLOWED_CATEGORIES",
     )
     ai_seed_only_categories: List[str] = Field(
-        default_factory=lambda: ["support_issue", "voucher_question"],
+        default_factory=lambda: ["support_issue", "voucher_question", "voucher_subscription"],
         env="AI_SEED_ONLY_CATEGORIES",
     )
     ai_priority_categories: List[str] = Field(
-        default_factory=lambda: ["new_user", "support_issue", "voucher_question", "win_share"],
+        default_factory=lambda: ["new_user", "support_issue", "voucher_question", "voucher_subscription", "win_share"],
         env="AI_PRIORITY_CATEGORIES",
     )
     auto_reply_new_user_cooldown_seconds: int = Field(120, env="AUTO_REPLY_NEW_USER_COOLDOWN_SECONDS")
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     auto_reply_duplicate_window_seconds: int = Field(180, env="AUTO_REPLY_DUPLICATE_WINDOW_SECONDS")
 
     auto_reply_categories: Set[str] = Field(
-        default_factory=lambda: {"new_user", "win_share", "positive_signal"}
+        default_factory=lambda: {"new_user", "win_share", "positive_signal", "voucher_subscription"}
     )
     suggestion_only_categories: Set[str] = Field(
         default_factory=lambda: {
