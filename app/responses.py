@@ -31,6 +31,13 @@ RESPONSES = {
         "Great to see your enthusiasm! Our team will provide more information about "
         "rewards and affiliate opportunities soon."
     ),
+    "voucher_subscription": {
+        "text": (
+            "New vouchers drop regularly. Stay subscribed to @advantplayofficial so you don't miss the next one! 💵"
+        ),
+        "button_text": "Join Official Channel",
+        "button_url": "https://t.me/advantplayofficial"
+    },
     "unknown": "",
 }
 

@@ -313,6 +313,50 @@ class HandlerFlowTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
+    def test_voucher_subscription_classified(self):
+        self.assertEqual(
+            classify("New vouchers drop regularly. Stay subscribed to channel to get them."),
+            "voucher_subscription",
+        )
+
+    def test_voucher_drop_announcement_classified(self):
+        self.assertEqual(classify("vouchers drop every week, don't miss out!"), "voucher_subscription")
+
+    def test_stay_subscribed_classified(self):
+        self.assertEqual(classify("Stay subscribed for the latest drops"), "voucher_subscription")
+
+    def test_real_new_user_still_detected(self):
+        self.assertEqual(classify("hi im new here"), "new_user")
+
+    def test_voucher_support_question_not_subscription(self):
+        result = classify("my voucher code is not working")
+        self.assertNotEqual(result, "voucher_subscription")
+
+    async def test_voucher_subscription_auto_replies(self):
+        settings = make_settings(enable_ai_decision=False)
+        update = types.SimpleNamespace(
+            message=DummyMessage("New vouchers drop regularly. Stay subscribed to channel to get them.")
+        )
+        context = types.SimpleNamespace(
+            bot=types.SimpleNamespace(id=42, set_message_reaction=AsyncMock(), send_message=AsyncMock())
+        )
+        decision = types.SimpleNamespace(
+            category="voucher_subscription",
+            action="auto_reply",
+            confidence=0.95,
+            suggested_reply="",
+            reason="rule",
+        )
+        throttle_allow = types.SimpleNamespace(allowed=True, reason="none", normalized_text_hash="h")
+
+        with patch("app.handlers.get_settings", return_value=settings), \
+             patch("app.handlers.classify_message", return_value=decision), \
+             patch("app.handlers.auto_reply_throttle.evaluate_auto_reply_throttle", return_value=throttle_allow), \
+             patch("app.handlers.log_message"):
+            await handlers.message_handler(update, context)
+
+        self.assertEqual(update.message.reply_text.await_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

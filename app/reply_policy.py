@@ -46,6 +46,12 @@ SEED_REPLIES: Dict[str, List[SeedItem]] = {
         SeedItem(key="positive_3", text="Glad you're enjoying it 😊", tone="upbeat", reply_goal="encourage", allowed_contexts=("group",)),
         SeedItem(key="positive_4", text="Good to hear! Thanks for being part of the community.", tone="upbeat", reply_goal="encourage", allowed_contexts=("group",)),
     ],
+    "voucher_subscription": [
+        SeedItem(key="voucher_sub_1", text="Welcome in 👋 Glad to have you here.", tone="warm", reply_goal="welcome", allowed_contexts=("group",)),
+        SeedItem(key="voucher_sub_2", text="New vouchers drop regularly. Stay subscribed to channel to get them.", tone="informative", reply_goal="inform", allowed_contexts=("group",)),
+        SeedItem(key="voucher_sub_3", text="Don't miss the drops! Make sure you're following @advantplayofficial 📢", tone="warm", reply_goal="encourage", allowed_contexts=("group",)),
+        SeedItem(key="voucher_sub_4", text="Good to see you here. Voucher drops happen regularly — stay tuned!", tone="warm", reply_goal="encourage", allowed_contexts=("group",)),
+    ],
 }
 
 
