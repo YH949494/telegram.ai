@@ -35,8 +35,8 @@ from .ai_reply import AIReplyService
 from .config import get_settings
 from .db import log_message
 from .openai_client import OpenAIClient
-from .reply_policy import ReplyPolicyService
-from .responses import generate_reply
+from .reply_policy import ReplyPolicyService, SEED_REPLIES
+from .responses import generate_reply, RESPONSES
 from .seed_rotation import seed_rotation_service
 from .throttle import auto_reply_throttle
 
@@ -411,8 +411,35 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 reply_payload = suggested_reply
                 allow_button = False
             else:
-                reply_payload = generate_reply(category, text)
-                allow_button = True
+                _det_seeds = SEED_REPLIES.get(category, [])
+                _det_seed = seed_rotation_service.pick_seed(
+                    chat_id=message.chat_id,
+                    category=category,
+                    seeds=_det_seeds,
+                    repeat_window_seconds=settings.ai_seed_repeat_window_seconds,
+                    max_seed_reuse_per_window=settings.ai_max_seed_reuse_per_window,
+                ) if _det_seeds else None
+                if _det_seed:
+                    base = RESPONSES.get(category, {})
+                    if isinstance(base, dict) and base.get("button_text"):
+                        reply_payload = {
+                            "text": _det_seed.text,
+                            "button_text": base.get("button_text"),
+                            "button_url": base.get("button_url"),
+                        }
+                        allow_button = True
+                    else:
+                        reply_payload = _det_seed.text
+                        allow_button = False
+                    if settings.enable_seed_rotation_memory:
+                        seed_rotation_service.mark_used(
+                            chat_id=message.chat_id,
+                            category=category,
+                            seed_key=_det_seed.key,
+                        )
+                else:
+                    reply_payload = generate_reply(category, text)
+                    allow_button = True
 
             if category == "new_user":
                 await safe_add_reaction(
