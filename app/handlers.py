@@ -1,3 +1,4 @@
+import html
 import logging
 import re
 from types import SimpleNamespace
@@ -497,14 +498,23 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         suggestion, _ = _prepare_reply_payload(suggestion_payload, allow_button=False)
         if suggestion and settings.admin_chat_id:
             logger.info("Suggestion forwarded for message_id=%s category=%s", message.message_id, category)
+            user = message.from_user
+            user_display = f"@{user.username}" if (user and user.username) else str(user.id if user else "unknown")
+            if message.chat_id < 0:
+                link_chat_id = abs(message.chat_id) - 1000000000000
+                msg_link = f"https://t.me/c/{link_chat_id}/{message.message_id}"
+                link_part = f' | <a href="{msg_link}">Go to message</a>'
+            else:
+                link_part = ""
             admin_text = (
-                f"Suggestion for message {message.message_id} in chat {message.chat_id}:\n"
-                f"User: {message.from_user.username or message.from_user.id if message.from_user else 'unknown'}\n"
-                f"Category: {category}\n"
-                f"Original: {text}\n"
-                f"Suggested reply: {suggestion}"
+                f"<b>Suggestion{link_part}</b>\n"
+                f"<b>User:</b> {html.escape(user_display)}\n"
+                f"<b>Category:</b> {html.escape(category)}\n"
+                f"<b>Original:</b> {html.escape(text)}\n\n"
+                f"<b>Suggested reply</b> (tap to copy):\n"
+                f"<code>{html.escape(suggestion)}</code>"
             )
-            await context.bot.send_message(chat_id=settings.admin_chat_id, text=admin_text)
+            await context.bot.send_message(chat_id=settings.admin_chat_id, text=admin_text, parse_mode="HTML")
 
 
 def setup_application():
