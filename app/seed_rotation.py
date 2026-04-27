@@ -1,3 +1,4 @@
+import random
 import threading
 import time
 from collections import defaultdict, deque
@@ -49,7 +50,9 @@ class SeedRotationService:
             if not scores:
                 return seeds[0]
             scores.sort(key=lambda item: (item[0], item[1]))
-            return scores[0][2]
+            best_count, best_ts = scores[0][0], scores[0][1]
+            tied = [s[2] for s in scores if s[0] == best_count and s[1] == best_ts]
+            return random.choice(tied)
 
     def mark_used(self, *, chat_id: int, category: str, seed_key: str) -> None:
         with self._lock:
