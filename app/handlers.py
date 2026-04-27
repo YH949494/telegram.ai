@@ -500,7 +500,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             logger.info("Suggestion forwarded for message_id=%s category=%s", message.message_id, category)
             user = message.from_user
             user_display = f"@{user.username}" if (user and user.username) else str(user.id if user else "unknown")
-            if message.chat_id < 0:
+            if settings.group_username:
+                msg_link = f"https://t.me/{settings.group_username.lstrip('@')}/{message.message_id}"
+                link_part = f' | <a href="{msg_link}">Go to message</a>'
+            elif message.chat_id < 0:
                 link_chat_id = abs(message.chat_id) - 1000000000000
                 msg_link = f"https://t.me/c/{link_chat_id}/{message.message_id}"
                 link_part = f' | <a href="{msg_link}">Go to message</a>'

@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     mongodb_db: str = Field("telegram_ai", env="MONGODB_DB")
     mongodb_collection: str = Field("messages", env="MONGODB_COLLECTION")
     admin_chat_id: Optional[int] = Field(None, env="ADMIN_CHAT_ID")
+    group_username: Optional[str] = Field(None, env="GROUP_USERNAME")
     port: int = Field(8000, env="PORT")
 
     enable_tagging: bool = Field(True, env="ENABLE_TAGGING")
