@@ -3,7 +3,7 @@ import re
 from types import SimpleNamespace
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji, Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 try:
     from .classifier import classify_message
@@ -33,7 +33,7 @@ from .ai_decision import AIDecisionService
 from .ai_budget import ai_budget_service
 from .ai_reply import AIReplyService
 from .config import get_settings
-from .db import log_message
+from .db import log_message, log_suggestion, log_feedback, get_few_shot_examples
 from .openai_client import OpenAIClient
 from .reply_policy import ReplyPolicyService, SEED_REPLIES
 from .responses import generate_reply, RESPONSES
@@ -46,7 +46,7 @@ _ai_runtime = None
 RECOMMENDATION_PATTERNS = [r"\brecommend(?:ed|ation)?\b", r"max\s*win", r"this\s+game\s+has", r"daily\s+recommendation", r"推荐", r"建议"]
 RESULT_PATTERNS = [r"\bi\s+won\b", r"\bmy\s+win\b", r"\bcashed?\s*out\b", r"\bjackpot\b", r"\bwon\s+\d+(?:\.\d+)?x?\b", r"中奖", r"赢了"]
 SUPPORT_PATTERNS = [r"\bvoucher\b", r"\bpromo\b", r"\bissue\b", r"\berror\b", r"\bcan't\b", r"无法", r"失败"]
-NEW_USER_PATTERNS = [r"\bnew\b", r"just\s+joined", r"新人", r"新来的"]
+NEW_USER_PATTERNS = [r"\bi'?m\s+new\b", r"\bi\s+am\s+new\b", r"\bjust\s+joined\b", r"\bnew\s+(?:here|member)\b", r"新人", r"新来的?", r"刚加入"]
 
 
 def _prepare_reply_payload(payload, allow_button: bool = False):
@@ -229,7 +229,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 action = "ignore" if not priority else action
                 raise RuntimeError("ai_decision_budget_block")
 
-            ai_decision = ai_decision_service.decide(text)
+            few_shot = get_few_shot_examples(category, limit=5) if category != "unknown" else []
+            ai_decision = ai_decision_service.decide(text, few_shot_examples=few_shot or None)
             policy = reply_policy.evaluate(ai_decision)
             decision_reason = f"ai:{policy.reason}"
             category = ai_decision.category
@@ -502,9 +503,56 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 f"User: {message.from_user.username or message.from_user.id if message.from_user else 'unknown'}\n"
                 f"Category: {category}\n"
                 f"Original: {text}\n"
-                f"Suggested reply: {suggestion}"
+                f"Suggested reply: {suggestion}\n\n"
+                f"Reply /approve, /reject, or /correct <category> to give feedback."
             )
-            await context.bot.send_message(chat_id=settings.admin_chat_id, text=admin_text)
+            sent = await context.bot.send_message(chat_id=settings.admin_chat_id, text=admin_text)
+            log_suggestion(
+                bot_message_id=sent.message_id,
+                original_message_id=message.message_id,
+                chat_id=message.chat_id,
+                original_text=text,
+                suggested_reply=suggestion,
+                category=category,
+            )
+
+
+async def _admin_feedback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, approved: bool) -> None:
+    settings = get_settings()
+    message = update.message
+    if message is None:
+        return
+    if not settings.admin_chat_id or message.chat_id != settings.admin_chat_id:
+        return
+    replied_to = message.reply_to_message
+    if replied_to is None:
+        await message.reply_text("Reply to a suggestion message to give feedback.")
+        return
+    correct_category = context.args[0] if context.args else None
+    found = log_feedback(
+        bot_message_id=replied_to.message_id,
+        approved=approved,
+        correct_category=correct_category,
+    )
+    if found:
+        label = "approved" if approved else "rejected"
+        cat_note = f" (corrected to {correct_category})" if correct_category else ""
+        await message.reply_text(f"Feedback recorded: {label}{cat_note}. The bot will learn from this.")
+        logger.info("Feedback recorded bot_message_id=%s approved=%s correct_category=%s", replied_to.message_id, approved, correct_category)
+    else:
+        await message.reply_text("Could not find the suggestion. Make sure you reply to the bot's suggestion message.")
+
+
+async def approve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _admin_feedback_handler(update, context, approved=True)
+
+
+async def reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _admin_feedback_handler(update, context, approved=False)
+
+
+async def correct_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _admin_feedback_handler(update, context, approved=True)
 
 
 def setup_application():
@@ -512,6 +560,9 @@ def setup_application():
     _get_ai_runtime(settings)
     application = ApplicationBuilder().token(settings.telegram_token).build()
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message_handler))
+    application.add_handler(CommandHandler("approve", approve_handler))
+    application.add_handler(CommandHandler("reject", reject_handler))
+    application.add_handler(CommandHandler("correct", correct_handler))
     return application
 
 
