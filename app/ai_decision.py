@@ -1,5 +1,5 @@
 import logging
-from typing import Literal
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, validator
 
@@ -106,19 +106,44 @@ DECISION_JSON_SCHEMA = {
 }
 
 
+DECISION_INSTRUCTIONS_BASE = (
+    "You are classifying messages in a Telegram community group for AdvantPlay, an online gaming platform. "
+    "Members use this group to: share wins, ask about vouchers/promo codes, report technical issues, "
+    "express positive/negative sentiment, and engage with the community. "
+    "The group is multilingual — members write in English and Chinese. "
+    "The bot's job is to engage meaningfully without being noisy or spammy. "
+    "Unnecessary replies are harmful. Prefer precision over recall and default to silence.\n\n"
+    "CATEGORY RULES:\n"
+    "- win_share: User sharing THEIR OWN actual game result. "
+    "  YES: 'I won RM500!', 'just hit jackpot', 'cashed out today', '赢了'. "
+    "  NO: 'max win is 100x', 'daily recommendation', 'this game has high rtp', '推荐'. "
+    "  Key: personal first-person result, not game stats or recommendations.\n"
+    "- new_user: User explicitly identifying themselves as new to the group. "
+    "  YES: 'just joined', 'im new here', '新人', '刚加入'. "
+    "  NO: messages that merely mention 'new' in another context (e.g. 'new voucher', 'new game').\n"
+    "- voucher_question: User asking about or having trouble with a specific voucher/promo code.\n"
+    "- support_issue: User reporting a technical problem — login failure, payment error, withdrawal stuck.\n"
+    "- positive_signal: User expressing genuine appreciation or satisfaction (not just noise).\n"
+    "- negative_sentiment: User expressing frustration, complaint, or reporting a loss.\n"
+    "- ignore: Spam, off-topic chat, bot commands, or low-value noise.\n"
+    "Output only schema-compliant JSON."
+)
+
+
 class AIDecisionService:
     def __init__(self, client: OpenAIClient, model: str) -> None:
         self.client = client
         self.model = model
 
-    def decide(self, text: str) -> DecisionResult:
-        instructions = (
-            "You are classifying whether a Telegram community bot should reply in a public group chat. "
-            "Unnecessary replies are harmful. Prefer precision over recall and default to silence. "
-            "Distinguish win-share from recommendations: phrases like 'max win', 'daily recommendation', "
-            "'recommended game', or 'this game has 100000x max win' are not win-share by default. "
-            "Output only schema-compliant JSON."
-        )
+    def decide(self, text: str, few_shot_examples: Optional[List[dict]] = None) -> DecisionResult:
+        instructions = DECISION_INSTRUCTIONS_BASE
+        if few_shot_examples:
+            example_lines = []
+            for ex in few_shot_examples[:5]:
+                example_lines.append(
+                    f'Message: "{ex["text"]}" → category: {ex["category"]}, should_reply: {ex["should_reply"]}'
+                )
+            instructions = instructions + "\n\nPAST APPROVED EXAMPLES:\n" + "\n".join(example_lines)
         data = self.client.decision_response(
             model=self.model,
             input_text=text,
