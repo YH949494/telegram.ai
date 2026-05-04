@@ -325,6 +325,15 @@ class HandlerFlowTests(unittest.IsolatedAsyncioTestCase):
     def test_stay_subscribed_classified(self):
         self.assertEqual(classify("Stay subscribed for the latest drops"), "voucher_subscription")
 
+    def test_comeback_campaign_classified(self):
+        self.assertEqual(classify("#comebackisreal"), "comeback_campaign")
+        self.assertEqual(classify("comebackisreal"), "comeback_campaign")
+        self.assertEqual(classify("Come Back Is Real"), "comeback_campaign")
+        self.assertEqual(classify("wow #ComeBackIsReal today"), "comeback_campaign")
+
+    def test_comeback_alone_not_classified(self):
+        self.assertNotEqual(classify("What a comeback from the team"), "comeback_campaign")
+
     def test_real_new_user_still_detected(self):
         self.assertEqual(classify("hi im new here"), "new_user")
 
