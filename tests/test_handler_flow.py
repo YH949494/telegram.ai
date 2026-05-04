@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 from app import handlers
 from app.classifier import classify
 from app.reply_policy import ReplyPolicyResult
+from app.responses import generate_reply, get_reaction
 from app.seed_rotation import SeedItem, SeedRotationService
 
 
@@ -331,6 +332,10 @@ class HandlerFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(classify("Come Back Is Real"), "comeback_campaign")
         self.assertEqual(classify("wow #ComeBackIsReal today"), "comeback_campaign")
 
+    def test_comeback_campaign_reaction_and_reply_payload(self):
+        self.assertEqual(get_reaction("comeback_campaign"), "🔥")
+        self.assertEqual(generate_reply("comeback_campaign", "#comebackisreal"), "")
+
     def test_comeback_alone_not_classified(self):
         self.assertNotEqual(classify("What a comeback from the team"), "comeback_campaign")
 
@@ -365,6 +370,55 @@ class HandlerFlowTests(unittest.IsolatedAsyncioTestCase):
             await handlers.message_handler(update, context)
 
         self.assertEqual(update.message.reply_text.await_count, 1)
+
+    async def test_comeback_campaign_adds_reaction_without_reply(self):
+        settings = make_settings(enable_ai_decision=False)
+        update = types.SimpleNamespace(message=DummyMessage("#comebackisreal"))
+        context = types.SimpleNamespace(
+            bot=types.SimpleNamespace(id=42, set_message_reaction=AsyncMock(), send_message=AsyncMock())
+        )
+        decision = types.SimpleNamespace(
+            category="comeback_campaign",
+            action="auto_reply",
+            confidence=0.95,
+            suggested_reply="",
+            reason="rule",
+        )
+        throttle_allow = types.SimpleNamespace(allowed=True, reason="none", normalized_text_hash="h")
+
+        with patch("app.handlers.get_settings", return_value=settings), \
+             patch("app.handlers.classify_message", return_value=decision), \
+             patch("app.handlers.auto_reply_throttle.evaluate_auto_reply_throttle", return_value=throttle_allow), \
+             patch("app.handlers.log_message"):
+            await handlers.message_handler(update, context)
+
+        self.assertEqual(context.bot.set_message_reaction.await_count, 1)
+        self.assertEqual(update.message.reply_text.await_count, 0)
+
+    async def test_comeback_campaign_reacts_even_when_throttle_blocks_reply(self):
+        settings = make_settings(enable_ai_decision=False)
+        update = types.SimpleNamespace(message=DummyMessage("#comebackisreal"))
+        context = types.SimpleNamespace(
+            bot=types.SimpleNamespace(id=42, set_message_reaction=AsyncMock(), send_message=AsyncMock())
+        )
+        decision = types.SimpleNamespace(
+            category="comeback_campaign",
+            action="auto_reply",
+            confidence=0.95,
+            suggested_reply="",
+            reason="rule",
+        )
+        throttle_block = types.SimpleNamespace(allowed=False, reason="user_cooldown", normalized_text_hash="h")
+
+        with patch("app.handlers.get_settings", return_value=settings), \
+             patch("app.handlers.classify_message", return_value=decision), \
+             patch("app.handlers.auto_reply_throttle.evaluate_auto_reply_throttle", return_value=throttle_block), \
+             patch("app.handlers.log_message"):
+            await handlers.message_handler(update, context)
+
+        self.assertEqual(context.bot.set_message_reaction.await_count, 1)
+        self.assertEqual(update.message.reply_text.await_count, 0)
+        self.assertEqual(context.bot.send_message.await_count, 0)
 
 
 if __name__ == "__main__":
