@@ -36,7 +36,7 @@ from .config import get_settings
 from .db import log_message, log_suggestion, log_feedback, get_few_shot_examples
 from .openai_client import OpenAIClient
 from .reply_policy import ReplyPolicyService, SEED_REPLIES
-from .responses import generate_reply, RESPONSES
+from .responses import generate_reply, get_reaction, RESPONSES
 from .seed_rotation import seed_rotation_service
 from .throttle import auto_reply_throttle
 
@@ -368,6 +368,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 emoji="🔥",
                 flow="win_share_intake",
             )
+        elif category == "comeback_campaign":
+            emoji = get_reaction(category)
+            if emoji:
+                await safe_add_reaction(
+                    bot=context.bot,
+                    chat_id=message.chat_id,
+                    message_id=message.message_id,
+                    emoji=emoji,
+                    flow="comeback_campaign",
+                )
 
         user_id = message.from_user.id if message.from_user else 0
         try:
