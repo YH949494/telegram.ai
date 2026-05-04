@@ -16,6 +16,10 @@ or augment this with a trained model or external API call.
 # Patterns grouped by category.  Add or refine patterns here to customise
 # classification.  Patterns are evaluated case‑insensitively.
 CATEGORIES: Dict[str, List[str]] = {
+    "comeback_campaign": [
+        r"(?:#\s*)?comebackisreal\b",
+        r"\bcome\s+back\s+is\s+real\b",
+    ],
     "voucher_subscription": [
         r"vouchers?\s+drop",
         r"drop\s+regular",

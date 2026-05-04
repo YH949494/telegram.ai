@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     auto_reply_duplicate_window_seconds: int = Field(180, env="AUTO_REPLY_DUPLICATE_WINDOW_SECONDS")
 
     auto_reply_categories: Set[str] = Field(
-        default_factory=lambda: {"new_user", "win_share", "positive_signal", "voucher_subscription"}
+        default_factory=lambda: {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
     )
     suggestion_only_categories: Set[str] = Field(
         default_factory=lambda: {

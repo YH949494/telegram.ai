@@ -6,6 +6,7 @@ interacts with users.  The key is the category returned by the classifier.
 """
 
 RESPONSES = {
+    "comeback_campaign": "🔥",
     "new_user": {
         "text": (
             "Welcome to the group! 🎉\n\n"
@@ -45,6 +46,7 @@ RESPONSES = {
 # They should be simple emoji strings.  Only categories in this mapping will trigger
 # a reaction.
 REACTIONS = {
+    "comeback_campaign": "🔥",
     "new_user": "👋",
     "win_share": "🎉",
     "positive_signal": "❤️",

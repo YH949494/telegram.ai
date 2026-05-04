@@ -41,7 +41,7 @@ from .seed_rotation import seed_rotation_service
 from .throttle import auto_reply_throttle
 
 logger = logging.getLogger(__name__)
-AUTO_REPLY_ALLOWED_CATEGORIES = {"new_user", "win_share", "positive_signal", "voucher_subscription"}
+AUTO_REPLY_ALLOWED_CATEGORIES = {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
 _ai_runtime = None
 RECOMMENDATION_PATTERNS = [r"\brecommend(?:ed|ation)?\b", r"max\s*win", r"this\s+game\s+has", r"daily\s+recommendation", r"推荐", r"建议"]
 RESULT_PATTERNS = [r"\bi\s+won\b", r"\bmy\s+win\b", r"\bcashed?\s*out\b", r"\bjackpot\b", r"\bwon\s+\d+(?:\.\d+)?x?\b", r"中奖", r"赢了"]
