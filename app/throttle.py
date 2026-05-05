@@ -122,3 +122,25 @@ class AutoReplyThrottle:
 
 
 auto_reply_throttle = AutoReplyThrottle()
+
+
+class ReactionCooldown:
+    """Per-chat cooldown gate for emoji reactions."""
+
+    def __init__(self) -> None:
+        self._last_reaction: Dict[Tuple[int, str], float] = {}
+        self._lock = threading.Lock()
+
+    def allow(self, chat_id: int, category: str, cooldown_seconds: int) -> bool:
+        """Return True and record the timestamp if the cooldown has elapsed, else False."""
+        now = time.time()
+        key = (chat_id, category)
+        with self._lock:
+            last = self._last_reaction.get(key)
+            if last is not None and now - last < cooldown_seconds:
+                return False
+            self._last_reaction[key] = now
+        return True
+
+
+reaction_cooldown = ReactionCooldown()

@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     )
     auto_reply_user_cooldown_seconds: int = Field(120, env="AUTO_REPLY_USER_COOLDOWN_SECONDS")
     auto_reply_duplicate_window_seconds: int = Field(180, env="AUTO_REPLY_DUPLICATE_WINDOW_SECONDS")
+    comeback_reaction_cooldown_seconds: int = Field(300, env="COMEBACK_REACTION_COOLDOWN_SECONDS")
 
     auto_reply_categories: Set[str] = Field(
         default_factory=lambda: {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
@@ -87,6 +88,7 @@ class Settings(BaseSettings):
         "auto_reply_default_category_cooldown_seconds",
         "auto_reply_user_cooldown_seconds",
         "auto_reply_duplicate_window_seconds",
+        "comeback_reaction_cooldown_seconds",
     )
     def cooldown_must_be_non_negative(cls, value: int, field):
         if value < 0:

@@ -38,7 +38,7 @@ from .openai_client import OpenAIClient
 from .reply_policy import ReplyPolicyService, SEED_REPLIES
 from .responses import generate_reply, get_reaction, RESPONSES
 from .seed_rotation import seed_rotation_service
-from .throttle import auto_reply_throttle
+from .throttle import auto_reply_throttle, reaction_cooldown
 
 logger = logging.getLogger(__name__)
 AUTO_REPLY_ALLOWED_CATEGORIES = {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
@@ -370,7 +370,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
         elif category == "comeback_campaign":
             emoji = get_reaction(category)
-            if emoji:
+            if emoji and reaction_cooldown.allow(
+                chat_id=message.chat_id,
+                category="comeback_campaign",
+                cooldown_seconds=settings.comeback_reaction_cooldown_seconds,
+            ):
                 await safe_add_reaction(
                     bot=context.bot,
                     chat_id=message.chat_id,

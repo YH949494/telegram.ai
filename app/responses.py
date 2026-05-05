@@ -5,6 +5,8 @@ Modify these dictionaries to change the wording or emojis used when the bot
 interacts with users.  The key is the category returned by the classifier.
 """
 
+import random
+
 RESPONSES = {
     "new_user": {
         "text": (
@@ -45,7 +47,8 @@ RESPONSES = {
 # They should be simple emoji strings.  Only categories in this mapping will trigger
 # a reaction.
 REACTIONS = {
-    "comeback_campaign": "🔥",
+    # probability: chance (0.0–1.0) the bot will react at all
+    "comeback_campaign": {"emojis": ["🔥", "🎉", "💪", "⚡", "🙌", "👏", "🥳", "💥"], "probability": 0.25},
     "new_user": "👋",
     "win_share": "🎉",
     "positive_signal": "❤️",
@@ -67,6 +70,17 @@ def get_reaction(category: str) -> str:
     """
     Return the emoji reaction for a given category, or an empty string if none is defined.
 
+    When the reaction config is a dict with ``emojis`` and ``probability``, the
+    function returns an empty string (no reaction) with probability
+    ``1 - probability``, otherwise a randomly chosen emoji from the list.
+
     :param category: Category returned by the classifier.
     """
-    return REACTIONS.get(category, "")
+    reaction = REACTIONS.get(category, "")
+    if isinstance(reaction, dict):
+        if random.random() > reaction["probability"]:
+            return ""
+        return random.choice(reaction["emojis"])
+    if isinstance(reaction, list):
+        return random.choice(reaction)
+    return reaction
