@@ -48,7 +48,7 @@ RESPONSES = {
 # a reaction.
 REACTIONS = {
     # probability: chance (0.0–1.0) the bot will react at all
-    "comeback_campaign": {"emojis": ["🔥", "🎉", "💪", "⚡", "🙌", "👏", "🥳", "💥"], "probability": 0.5},
+    "comeback_campaign": {"emojis": ["🔥", "🎉", "💪", "⚡", "🙌", "👏", "🥳", "💥"], "probability": 0.25},
     "new_user": "👋",
     "win_share": "🎉",
     "positive_signal": "❤️",
