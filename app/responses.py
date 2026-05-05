@@ -5,6 +5,8 @@ Modify these dictionaries to change the wording or emojis used when the bot
 interacts with users.  The key is the category returned by the classifier.
 """
 
+import random
+
 RESPONSES = {
     "new_user": {
         "text": (
@@ -45,7 +47,7 @@ RESPONSES = {
 # They should be simple emoji strings.  Only categories in this mapping will trigger
 # a reaction.
 REACTIONS = {
-    "comeback_campaign": "🔥",
+    "comeback_campaign": ["🔥", "🎉", "💪", "⚡", "🙌", "👏", "🥳", "💥"],
     "new_user": "👋",
     "win_share": "🎉",
     "positive_signal": "❤️",
@@ -69,4 +71,7 @@ def get_reaction(category: str) -> str:
 
     :param category: Category returned by the classifier.
     """
-    return REACTIONS.get(category, "")
+    reaction = REACTIONS.get(category, "")
+    if isinstance(reaction, list):
+        return random.choice(reaction)
+    return reaction
