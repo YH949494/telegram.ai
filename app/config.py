@@ -44,11 +44,17 @@ class Settings(BaseSettings):
         env="AI_GENERATION_ALLOWED_CATEGORIES",
     )
     ai_seed_only_categories: List[str] = Field(
-        default_factory=lambda: ["support_issue", "voucher_question", "voucher_subscription"],
+        default_factory=lambda: [
+            "support_issue", "voucher_question", "voucher_subscription",
+            "deposit_question", "withdrawal_question", "bonus_inquiry", "game_question",
+        ],
         env="AI_SEED_ONLY_CATEGORIES",
     )
     ai_priority_categories: List[str] = Field(
-        default_factory=lambda: ["new_user", "support_issue", "voucher_question", "voucher_subscription", "win_share"],
+        default_factory=lambda: [
+            "new_user", "support_issue", "voucher_question", "voucher_subscription",
+            "win_share", "deposit_question", "withdrawal_question",
+        ],
         env="AI_PRIORITY_CATEGORIES",
     )
     auto_reply_new_user_cooldown_seconds: int = Field(120, env="AUTO_REPLY_NEW_USER_COOLDOWN_SECONDS")
@@ -64,7 +70,7 @@ class Settings(BaseSettings):
     comeback_reaction_cooldown_seconds: int = Field(300, env="COMEBACK_REACTION_COOLDOWN_SECONDS")
 
     auto_reply_categories: Set[str] = Field(
-        default_factory=lambda: {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
+        default_factory=lambda: {"comeback_campaign", "new_user", "win_share", "loss_share", "positive_signal", "voucher_subscription"}
     )
     suggestion_only_categories: Set[str] = Field(
         default_factory=lambda: {
@@ -72,6 +78,10 @@ class Settings(BaseSettings):
             "support_issue",
             "negative_sentiment",
             "high_intent",
+            "deposit_question",
+            "withdrawal_question",
+            "bonus_inquiry",
+            "game_question",
         }
     )
 

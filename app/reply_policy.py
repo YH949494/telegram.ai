@@ -52,6 +52,36 @@ SEED_REPLIES: Dict[str, List[SeedItem]] = {
         SeedItem(key="voucher_sub_3", text="Don't miss the drops! Make sure you're following @advantplayofficial 📢", tone="warm", reply_goal="encourage", allowed_contexts=("group",)),
         SeedItem(key="voucher_sub_4", text="Good to see you here. Voucher drops happen regularly — stay tuned!", tone="warm", reply_goal="encourage", allowed_contexts=("group",)),
     ],
+    "deposit_question": [
+        SeedItem(key="deposit_1", text="Thanks for asking! Please share more details and our team will assist you with your deposit shortly.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="deposit_2", text="Got it — let us check the details for you. What payment method are you using?", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="deposit_3", text="We're here to help! Our team will follow up on your deposit question right away.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="deposit_4", text="Understood. Please provide more info so we can assist with your deposit.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+    ],
+    "withdrawal_question": [
+        SeedItem(key="withdrawal_1", text="Thanks for reaching out. Our team will look into your withdrawal and update you shortly.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="withdrawal_2", text="Got it. Let us check the withdrawal status for you right away.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="withdrawal_3", text="Noted! Please share your details so we can review your withdrawal query.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+        SeedItem(key="withdrawal_4", text="We'll look into this immediately. Please provide your account info so we can assist.", tone="helpful", reply_goal="clarify", allowed_contexts=("group",)),
+    ],
+    "bonus_inquiry": [
+        SeedItem(key="bonus_1", text="Thanks for asking about our promotions! An admin will share the latest bonus details with you.", tone="helpful", reply_goal="answer_question", allowed_contexts=("group",)),
+        SeedItem(key="bonus_2", text="Our team will follow up with the latest bonus and cashback info for you.", tone="helpful", reply_goal="answer_question", allowed_contexts=("group",)),
+        SeedItem(key="bonus_3", text="Great to see your interest in our promotions! Stay tuned — more details coming your way.", tone="warm", reply_goal="encourage", allowed_contexts=("group",)),
+        SeedItem(key="bonus_4", text="We've noted your query. An admin will share the current promotion details shortly.", tone="helpful", reply_goal="answer_question", allowed_contexts=("group",)),
+    ],
+    "game_question": [
+        SeedItem(key="game_q_1", text="Great question! Our team will help point you in the right direction.", tone="helpful", reply_goal="answer_question", allowed_contexts=("group",)),
+        SeedItem(key="game_q_2", text="We'll be happy to help! An admin will follow up with game details for you.", tone="helpful", reply_goal="answer_question", allowed_contexts=("group",)),
+        SeedItem(key="game_q_3", text="Stay tuned — our team will share more info on available games shortly.", tone="helpful", reply_goal="answer_question", allowed_contexts=("group",)),
+    ],
+    "loss_share": [
+        SeedItem(key="loss_share_1", text="Don't give up! Every spin is a fresh start 💪", tone="upbeat", reply_goal="encourage", allowed_contexts=("group",)),
+        SeedItem(key="loss_share_2", text="Tough session — stay cool and play smart next round 🎯", tone="neutral", reply_goal="encourage", allowed_contexts=("group",)),
+        SeedItem(key="loss_share_3", text="Bad luck happens to the best of us! Hope your next session turns things around 🍀", tone="warm", reply_goal="encourage", allowed_contexts=("group",)),
+        SeedItem(key="loss_share_4", text="Keep your head up — the next win could be just around the corner! 💰", tone="upbeat", reply_goal="encourage", allowed_contexts=("group",)),
+        SeedItem(key="loss_share_5", text="Hang in there! Variance is part of the game — better luck ahead 🌟", tone="warm", reply_goal="encourage", allowed_contexts=("group",)),
+    ],
 }
 
 
