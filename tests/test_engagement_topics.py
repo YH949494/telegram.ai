@@ -82,6 +82,21 @@ class EngagementTopicTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cleaned, "Fast spin or normal spin — which one you like?")
         self.assertIsNone(reason)
 
+    def test_bare_www_url_rejected(self):
+        cleaned, reason = engagement_topics._sanitize_question("Check this www.example.com?", 120, True)
+        self.assertIsNone(cleaned)
+        self.assertEqual(reason, "contains_url")
+
+    def test_uppercase_www_url_rejected(self):
+        cleaned, reason = engagement_topics._sanitize_question("Check this WWW.example.com?", 120, True)
+        self.assertIsNone(cleaned)
+        self.assertEqual(reason, "contains_url")
+
+    def test_https_url_rejected(self):
+        cleaned, reason = engagement_topics._sanitize_question("Check this https://example.com?", 120, True)
+        self.assertIsNone(cleaned)
+        self.assertEqual(reason, "contains_url")
+
     def test_fallbacks_are_simple_and_safe(self):
         for text in engagement_topics.SEED_FALLBACKS.values():
             cleaned, reason = engagement_topics._sanitize_question(text, 120, False)

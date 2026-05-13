@@ -125,7 +125,7 @@ def _sanitize_question(text: str, max_chars: int, require_question: bool = True)
         return None, "too_many_words"
     if len(cleaned) > max_chars:
         return None, "too_long"
-    if re.search(r"https?://|www\\.", cleaned, flags=re.IGNORECASE):
+    if re.search(r"(?:https?://|www\.)", cleaned, flags=re.IGNORECASE):
         return None, "contains_url"
     for hard in HARD_WORDS:
         if hard in lowered:
