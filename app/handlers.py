@@ -34,6 +34,7 @@ from .ai_budget import ai_budget_service
 from .ai_reply import AIReplyService
 from .config import get_settings
 from .db import log_message, log_suggestion, log_feedback, get_few_shot_examples
+from .engagement_topics import register_engagement_topic_job
 from .openai_client import OpenAIClient
 from .reply_policy import ReplyPolicyService, SEED_REPLIES
 from .responses import generate_reply, get_reaction, RESPONSES
@@ -577,6 +578,7 @@ def setup_application():
     application.add_handler(CommandHandler("approve", approve_handler))
     application.add_handler(CommandHandler("reject", reject_handler))
     application.add_handler(CommandHandler("correct", correct_handler))
+    register_engagement_topic_job(application)
     return application
 
 

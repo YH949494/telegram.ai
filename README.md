@@ -99,6 +99,17 @@ For Fly.io, set the secrets using `flyctl secrets set`:
 flyctl secrets set TELEGRAM_TOKEN=... MONGODB_URI=... MONGODB_DB=telegram_ai MONGODB_COLLECTION=messages ADMIN_CHAT_ID=...
 ```
 
+Engagement topics (optional):
+
+```bash
+flyctl secrets set ENGAGEMENT_TOPICS_ENABLED=1 ENGAGEMENT_TOPIC_AI_ENABLED=1 ENGAGEMENT_TOPIC_CHAT_ID=<target_group_id> ENGAGEMENT_TOPIC_MIN_INTERVAL_HOURS=48 ENGAGEMENT_TOPIC_DAILY_CAP=1
+```
+
+For engagement-topic defaults (`ENGAGEMENT_TOPIC_MIN_INTERVAL_HOURS`, `ENGAGEMENT_TOPIC_DAILY_CAP`, etc.),
+it is safe to keep non-secret values in repo/env files. Never commit secrets such as
+`TELEGRAM_TOKEN`, `MONGODB_URI`, or `OPENAI_API_KEY`. `ENGAGEMENT_TOPIC_CHAT_ID` is non-secret,
+but we still recommend setting it via env/Fly secret because it identifies your target group.
+
 ## Repository structure
 
 ```

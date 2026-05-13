@@ -63,6 +63,19 @@ class Settings(BaseSettings):
     auto_reply_duplicate_window_seconds: int = Field(180, env="AUTO_REPLY_DUPLICATE_WINDOW_SECONDS")
     comeback_reaction_cooldown_seconds: int = Field(300, env="COMEBACK_REACTION_COOLDOWN_SECONDS")
 
+    engagement_topics_enabled: bool = Field(False, env="ENGAGEMENT_TOPICS_ENABLED")
+    engagement_topic_ai_enabled: bool = Field(False, env="ENGAGEMENT_TOPIC_AI_ENABLED")
+    engagement_topic_chat_id: Optional[int] = Field(None, env="ENGAGEMENT_TOPIC_CHAT_ID")
+    engagement_topic_min_interval_hours: int = Field(48, env="ENGAGEMENT_TOPIC_MIN_INTERVAL_HOURS")
+    engagement_topic_daily_cap: int = Field(1, env="ENGAGEMENT_TOPIC_DAILY_CAP")
+    engagement_topic_seed_cooldown_days: int = Field(30, env="ENGAGEMENT_TOPIC_SEED_COOLDOWN_DAYS")
+    engagement_topic_text_cooldown_days: int = Field(60, env="ENGAGEMENT_TOPIC_TEXT_COOLDOWN_DAYS")
+    engagement_topic_max_chars: int = Field(120, env="ENGAGEMENT_TOPIC_MAX_CHARS")
+    engagement_topic_require_quiet: bool = Field(False, env="ENGAGEMENT_TOPIC_REQUIRE_QUIET")
+    engagement_topic_min_quiet_minutes: int = Field(45, env="ENGAGEMENT_TOPIC_MIN_QUIET_MINUTES")
+    engagement_topic_scheduler_interval_hours: int = Field(6, env="ENGAGEMENT_TOPIC_SCHEDULER_INTERVAL_HOURS")
+    engagement_topic_openai_model: str = Field("gpt-4o-mini", env="ENGAGEMENT_TOPIC_OPENAI_MODEL")
+
     auto_reply_categories: Set[str] = Field(
         default_factory=lambda: {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
     )
