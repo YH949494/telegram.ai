@@ -1,6 +1,7 @@
 import logging
 import re
 from types import SimpleNamespace
+from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
@@ -33,7 +34,8 @@ from .ai_decision import AIDecisionService
 from .ai_budget import ai_budget_service
 from .ai_reply import AIReplyService
 from .config import get_settings
-from .db import log_message, log_suggestion, log_feedback, get_few_shot_examples
+from .community_intelligence import classify_community_message
+from .db import log_message, log_suggestion, log_feedback, get_few_shot_examples, log_community_intelligence_event
 from .engagement_topics import register_engagement_topic_job
 from .openai_client import OpenAIClient
 from .reply_policy import ReplyPolicyService, SEED_REPLIES
@@ -163,7 +165,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     message = update.message
     if message is None:
         return
-    if not getattr(message, "text", None):
+    text = getattr(message, "text", None) or getattr(message, "caption", None)
+    if not text:
         return
     if message.from_user and message.from_user.is_bot:
         return
@@ -171,7 +174,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     settings = get_settings()
-    text = message.text
+    has_photo = bool(getattr(message, "photo", None))
+    has_video = bool(getattr(message, "video", None))
 
     logger.info(
         "Received message chat_id=%s message_id=%s user_id=%s snippet=%s",
@@ -180,6 +184,49 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         message.from_user.id if message.from_user else None,
         text[:80],
     )
+
+    if settings.community_helper_enabled and settings.community_helper_log_only:
+        try:
+            ci_decision = classify_community_message(
+                text,
+                has_photo=has_photo,
+                has_video=has_video,
+                user_id=message.from_user.id if message.from_user else None,
+                username=message.from_user.username if message.from_user else None,
+            )
+            ci_doc = {
+                "created_at": message.date or datetime.utcnow(),
+                "chat_id": message.chat_id,
+                "message_id": message.message_id,
+                "user_id": message.from_user.id if message.from_user else None,
+                "username": message.from_user.username if message.from_user else None,
+                "text_sample": text[:200],
+                "fingerprint": ci_decision.fingerprint,
+                "category": ci_decision.category,
+                "intent": ci_decision.intent,
+                "action": ci_decision.action,
+                "confidence": ci_decision.confidence,
+                "sensitive": ci_decision.sensitive,
+                "admin_alert": ci_decision.admin_alert,
+                "has_photo": has_photo,
+                "has_video": has_video,
+                "would_reply": ci_decision.action in {"reply", "reply_and_admin_alert"},
+                "would_react": bool(ci_decision.emoji),
+                "would_alert_admin": ci_decision.admin_alert,
+                "reason": ci_decision.reason,
+            }
+            log_community_intelligence_event(ci_doc)
+            logger.info(
+                "community_helper_log_only message_id=%s intent=%s action=%s sensitive=%s",
+                message.message_id,
+                ci_decision.intent,
+                ci_decision.action,
+                ci_decision.sensitive,
+            )
+            # TODO(next patch): when live sending is enabled, suppress repeated fingerprint replies for 10 minutes,
+            # emit one admin alert on 5+ duplicate hits within 10 minutes, and apply 1-hour admin alert cooldown.
+        except Exception:
+            logger.warning("community_helper_classification_failed message_id=%s", message.message_id, exc_info=True)
 
     if not settings.enable_tagging:
         logger.info("Tagging disabled; skipping classification")
