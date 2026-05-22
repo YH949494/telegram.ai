@@ -10,6 +10,7 @@ from .config import get_settings
 logger = logging.getLogger(__name__)
 
 _client: Optional[MongoClient] = None
+_community_indexes_ready: bool = False
 
 
 def get_db():
@@ -129,3 +130,28 @@ def get_few_shot_examples(category: str, limit: int = 5) -> List[Dict[str, Any]]
     except Exception:
         logger.exception("Failed to fetch few-shot examples for category=%s", category)
         return []
+
+
+def _ensure_community_intelligence_indexes(db) -> None:
+    global _community_indexes_ready
+    if _community_indexes_ready:
+        return
+    try:
+        col = db["community_intelligence_events"]
+        col.create_index([("created_at", -1)], background=True)
+        col.create_index([("chat_id", 1), ("created_at", -1)], background=True)
+        col.create_index([("fingerprint", 1), ("chat_id", 1), ("created_at", -1)], background=True)
+        col.create_index([("intent", 1), ("created_at", -1)], background=True)
+        col.create_index([("sensitive", 1), ("created_at", -1)], background=True)
+        _community_indexes_ready = True
+    except Exception:
+        logger.warning("Community intelligence index setup failed", exc_info=True)
+
+
+def log_community_intelligence_event(doc: Dict[str, Any]) -> None:
+    try:
+        db = get_db()
+        _ensure_community_intelligence_indexes(db)
+        db["community_intelligence_events"].insert_one(doc)
+    except Exception:
+        logger.warning("Failed to persist community intelligence event", exc_info=True)

@@ -76,6 +76,12 @@ class Settings(BaseSettings):
     engagement_topic_scheduler_interval_hours: int = Field(6, env="ENGAGEMENT_TOPIC_SCHEDULER_INTERVAL_HOURS")
     engagement_topic_openai_model: str = Field("gpt-4o-mini", env="ENGAGEMENT_TOPIC_OPENAI_MODEL")
 
+    community_helper_enabled: bool = Field(False, env="COMMUNITY_HELPER_ENABLED")
+    community_helper_log_only: bool = Field(True, env="COMMUNITY_HELPER_LOG_ONLY")
+    community_faq_reply_enabled: bool = Field(False, env="COMMUNITY_FAQ_REPLY_ENABLED")
+    community_reactions_enabled: bool = Field(False, env="COMMUNITY_REACTIONS_ENABLED")
+    community_admin_alerts_enabled: bool = Field(False, env="COMMUNITY_ADMIN_ALERTS_ENABLED")
+
     auto_reply_categories: Set[str] = Field(
         default_factory=lambda: {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
     )
