@@ -1,5 +1,8 @@
 import unittest
+from datetime import datetime, timezone
+from unittest.mock import patch
 
+from app import db as db_module
 from app.community_intelligence import (
     classify_community_message,
     message_fingerprint,
@@ -103,6 +106,28 @@ class CommunityIntelligenceTests(unittest.TestCase):
         all_text = " ".join(replies).lower()
         for phrase in banned:
             self.assertNotIn(phrase, all_text)
+
+
+    def test_duplicate_aggregation_sorts_by_latest_created_at(self):
+        captured = []
+
+        class FakeCollection:
+            def aggregate(self, pipeline):
+                captured.append(pipeline)
+                return []
+
+            def find(self, *args, **kwargs):
+                return []
+
+        class FakeDB(dict):
+            def __getitem__(self, key):
+                return FakeCollection()
+
+        with patch("app.db.get_db", return_value=FakeDB()):
+            db_module.aggregate_community_helper_events(since=datetime.now(timezone.utc))
+
+        duplicate_pipeline = next(p for p in captured if any(stage.get("$match", {}).get("fingerprint") == {"$ne": None} for stage in p))
+        self.assertEqual(duplicate_pipeline[1], {"$sort": {"created_at": -1}})
 
 
 if __name__ == "__main__":

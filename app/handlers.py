@@ -1,7 +1,6 @@
 import logging
 import re
 from types import SimpleNamespace
-from datetime import datetime
 from datetime import timedelta
 from html import escape
 
@@ -51,6 +50,7 @@ from .reply_policy import ReplyPolicyService, SEED_REPLIES
 from .responses import generate_reply, get_reaction, RESPONSES
 from .seed_rotation import seed_rotation_service
 from .throttle import auto_reply_throttle, reaction_cooldown
+from .time_utils import normalize_utc_datetime, utc_now
 
 logger = logging.getLogger(__name__)
 AUTO_REPLY_ALLOWED_CATEGORIES = {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
@@ -204,7 +204,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 username=message.from_user.username if message.from_user else None,
             )
             ci_doc = {
-                "created_at": message.date or datetime.utcnow(),
+                "created_at": normalize_utc_datetime(getattr(message, "date", None)),
                 "chat_id": message.chat_id,
                 "message_id": message.message_id,
                 "user_id": message.from_user.id if message.from_user else None,
@@ -700,7 +700,7 @@ async def community_helper_report_handler(update: Update, context: ContextTypes.
         await message.reply_text("This command is admin-only.")
         return
     window, label = parse_report_window(context.args[0] if context.args else None)
-    since = datetime.utcnow() - window
+    since = utc_now() - window
     try:
         stats = aggregate_community_helper_events(since=since)
     except Exception:

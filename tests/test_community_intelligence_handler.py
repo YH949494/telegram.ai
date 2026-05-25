@@ -1,6 +1,6 @@
 import types
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 from app import handlers
@@ -21,7 +21,7 @@ class DummyMessage:
         self.message_id = 1001
         self.from_user = user or DummyUser()
         self.reply_text = AsyncMock()
-        self.date = datetime.utcnow()
+        self.date = datetime.now(timezone.utc)
         self.photo = photo
         self.video = video
 
@@ -140,6 +140,33 @@ class CommunityIntelligenceHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(doc["would_reply"])
         self.assertFalse(doc["would_react"])
         self.assertFalse(doc["would_alert_admin"])
+
+    async def test_created_at_naive_datetime_normalized_to_utc(self):
+        update = types.SimpleNamespace(message=DummyMessage(text="hello"))
+        update.message.date = datetime(2026, 1, 1, 12, 0, 0)
+        context = types.SimpleNamespace(bot=types.SimpleNamespace(id=42))
+        ci_decision = types.SimpleNamespace(
+            fingerprint="abc", category="voucher", intent="voucher_where_to_enter", action="reply", confidence=0.9,
+            sensitive=False, admin_alert=False, emoji=None, reason="faq_match",
+        )
+        with patch("app.handlers.get_settings", return_value=self._settings(community_helper_enabled=True)),              patch("app.handlers.classify_community_message", return_value=ci_decision),              patch("app.handlers.log_community_intelligence_event") as ci_log:
+            await handlers.message_handler(update, context)
+        created_at = ci_log.call_args.args[0]["created_at"]
+        self.assertIsNotNone(created_at.tzinfo)
+        self.assertEqual(created_at.tzinfo, timezone.utc)
+
+    async def test_created_at_missing_datetime_uses_utc_now(self):
+        update = types.SimpleNamespace(message=DummyMessage(text="hello"))
+        update.message.date = None
+        context = types.SimpleNamespace(bot=types.SimpleNamespace(id=42))
+        ci_decision = types.SimpleNamespace(
+            fingerprint="abc", category="voucher", intent="voucher_where_to_enter", action="reply", confidence=0.9,
+            sensitive=False, admin_alert=False, emoji=None, reason="faq_match",
+        )
+        fixed_now = datetime(2026, 1, 1, 13, 0, 0, tzinfo=timezone.utc)
+        with patch("app.handlers.get_settings", return_value=self._settings(community_helper_enabled=True)),              patch("app.handlers.classify_community_message", return_value=ci_decision),              patch("app.handlers.normalize_utc_datetime", return_value=fixed_now),              patch("app.handlers.log_community_intelligence_event") as ci_log:
+            await handlers.message_handler(update, context)
+        self.assertEqual(ci_log.call_args.args[0]["created_at"], fixed_now)
 
 
 if __name__ == "__main__":
