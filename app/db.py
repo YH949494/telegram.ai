@@ -1,12 +1,12 @@
 import logging
 from datetime import datetime
-from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
 from .config import get_settings
+from .time_utils import normalize_utc_datetime, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def log_message(
             "decision": decision or {},
             "throttle_blocked": throttle_blocked,
             "throttle_reason": throttle_reason,
-            "date": message.date or datetime.utcnow(),
+            "date": normalize_utc_datetime(getattr(message, "date", None)),
         }
         collection.insert_one(doc)
         logger.info("Mongo log inserted message_id=%s", message.message_id)
@@ -79,7 +79,7 @@ def log_suggestion(
             "category": category,
             "approved": None,
             "correct_category": None,
-            "date": datetime.utcnow(),
+            "date": utc_now(),
         })
     except Exception:
         logger.exception("Failed to log suggestion bot_message_id=%s", bot_message_id)
@@ -96,7 +96,7 @@ def log_feedback(
         db = get_db()
         settings = get_settings()
         col = db["suggestions"]
-        update: Dict[str, Any] = {"approved": approved, "feedback_date": datetime.utcnow()}
+        update: Dict[str, Any] = {"approved": approved, "feedback_date": utc_now()}
         if correct_category:
             update["correct_category"] = correct_category
         result = col.update_one({"bot_message_id": bot_message_id}, {"$set": update})
@@ -199,6 +199,7 @@ def aggregate_community_helper_events(*, since: datetime, limit: int = 10, sampl
         col.aggregate(
             [
                 {"$match": {**match, "fingerprint": {"$ne": None}}},
+                {"$sort": {"created_at": -1}},
                 {
                     "$group": {
                         "_id": "$fingerprint",

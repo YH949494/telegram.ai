@@ -1,5 +1,6 @@
 import types
 import unittest
+from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, patch
 
 from app.handlers import (
@@ -67,6 +68,22 @@ class ReportTests(unittest.IsolatedAsyncioTestCase):
              patch("app.handlers.aggregate_community_helper_events", side_effect=RuntimeError("db")):
             await community_helper_report_handler(update, context)
         self.assertIn("Could not generate", msg.reply_text.await_args.args[0])
+
+    async def test_report_since_uses_timezone_aware_utc(self):
+        msg = DummyMessage(chat_id=1)
+        update = types.SimpleNamespace(message=msg)
+        context = types.SimpleNamespace(args=["24h"])
+        settings = types.SimpleNamespace(admin_chat_id=1)
+        fixed_now = datetime(2026, 1, 2, 0, 0, 0, tzinfo=timezone.utc)
+
+        def _assert_since(*, since):
+            self.assertIsNotNone(since.tzinfo)
+            self.assertEqual(since.tzinfo, timezone.utc)
+            self.assertEqual(since, fixed_now - timedelta(hours=24))
+            return {"total": 0}
+
+        with patch("app.handlers.get_settings", return_value=settings),              patch("app.handlers.utc_now", return_value=fixed_now),              patch("app.handlers.aggregate_community_helper_events", side_effect=_assert_since):
+            await community_helper_report_handler(update, context)
 
 
 if __name__ == "__main__":
