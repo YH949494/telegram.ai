@@ -73,10 +73,59 @@ class CommunityIntelligenceTests(unittest.TestCase):
         self.assertIn("#MyWin", d.reply)
         self.assertIn("#ComebackIsReal", d.reply)
 
-        d2 = classify_community_message("my win over 50x", has_photo=True)
+        d2 = classify_community_message("do I need #ComebackIsReal if my win over 50x", has_photo=True)
         self.assertEqual(d2.intent, "mywin_comeback_tag")
         self.assertIn("#ComebackIsReal", d2.reply)
         self.assertEqual(d2.emoji, "🔥")
+
+
+    def test_campaign_hashtag_signals_no_reply(self):
+        samples = [
+            "#ComebackIsReal",
+            "#MYWIN",
+            "#mywin",
+            "#claimcode",
+            "Silver spin secured #ComebackIsReal",
+            "#MYWIN Silver spin secured #ComebackIsReal",
+            "Bronze locked 🔥 AdvantPlay",
+        ]
+        for text in samples:
+            d = classify_community_message(text)
+            self.assertEqual(d.intent, "campaign_hashtag_signal")
+            self.assertEqual(d.action, "ignore")
+            self.assertIsNone(d.reply)
+
+    def test_real_mywin_questions_still_reply(self):
+        d1 = classify_community_message("what hashtags do I use for MyWin")
+        self.assertEqual(d1.intent, "mywin_hashtags")
+        self.assertEqual(d1.action, "reply")
+
+        d2 = classify_community_message("how do I submit my spin result in MyWin")
+        self.assertEqual(d2.intent, "mywin_submit_how")
+        self.assertEqual(d2.action, "reply")
+
+        d3 = classify_community_message("if win over 50x what tag should I use")
+        self.assertIn(d3.intent, {"mywin_comeback_tag", "mywin_hashtags"})
+        self.assertEqual(d3.action, "reply")
+
+    def test_external_link_spam_and_allowlist(self):
+        spam = classify_community_message("https://app.jazz55.io/aff/74Kj")
+        self.assertEqual(spam.intent, "external_link_or_affiliate_spam")
+        self.assertTrue(spam.admin_alert)
+        self.assertIsNone(spam.reply)
+
+        official = classify_community_message("https://t.me/advantplayofficial/714")
+        self.assertNotEqual(official.intent, "external_link_or_affiliate_spam")
+
+    def test_job_spam_no_reply(self):
+        d1 = classify_community_message("Ищу маленькую команду людей, которые могут помочь с выполнением задач на скла")
+        self.assertEqual(d1.intent, "job_or_task_spam")
+        self.assertEqual(d1.action, "ignore")
+        self.assertIsNone(d1.reply)
+
+        d2 = classify_community_message("part time job task team")
+        self.assertEqual(d2.intent, "job_or_task_spam")
+        self.assertEqual(d2.action, "ignore")
 
     def test_fingerprint_and_normalization(self):
         self.assertIsNone(message_fingerprint(None))

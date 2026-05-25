@@ -132,6 +132,21 @@ SENSITIVE_PATTERNS = [
     ("bonus_dispute", ["bonus dispute", "bonus missing", "bonus not credited"]),
 ]
 
+QUESTION_HINTS = [
+    "what", "how", "need", "should", "use", "tag", "hashtag", "submit", "where", "do i", "?"
+]
+
+CAMPAIGN_SIGNAL_HASHTAGS = ["#comebackisreal", "#mywin", "#claimcode"]
+CAMPAIGN_SIGNAL_STATUS_TERMS = ["silver spin secured", "bronze locked", "advantplay"]
+JOB_SPAM_TERMS = ["warehouse", "job", "task", "team people", "выполнение задач", "скла", "ищу", "kerja", "part time", "sambilan"]
+
+OFFICIAL_LINK_ALLOWLIST = [
+    "t.me/advantplayofficial",
+    "t.me/apreferralv1_bot",
+    "t.me/+tggbopvp1p05nja9",
+    "https://t.me/advantplayofficial/714",
+]
+
 FAQ_PATTERNS = [
     ("voucher_where_to_enter", ["where enter voucher", "where to enter voucher", "enter code where"]),
     ("voucher_code_incorrect", ["code incorrect", "invalid code", "wrong code"]),
@@ -141,7 +156,7 @@ FAQ_PATTERNS = [
     ("free_spin_video_guide", ["free spin video", "spin guide", "tutorial free spin"]),
     ("new_user_start", ["new here", "just joined", "how to start", "new user"]),
     ("miniapp_access_how", ["mini app", "open miniapp", "access mini app"]),
-    ("mywin_submit_how", ["submit mywin", "post my win", "share mywin"]),
+    ("mywin_submit_how", ["submit mywin", "post my win", "share mywin", "submit my spin result", "where to submit mywin"]),
     ("mywin_hashtags", ["hashtags", "tag for mywin", "mywin hashtag"]),
     ("mywin_comeback_tag", ["over 50x", ">50x", "50x", "comebackisreal"]),
     ("official_channel_follow_how", ["official channel", "follow channel"]),
@@ -188,6 +203,30 @@ def _match_intent(normalized: str, patterns: list[tuple[str, list[str]]]) -> Opt
     return None
 
 
+
+def _contains_external_url(text: str) -> bool:
+    urls = re.findall(r"https?://\S+|www\.\S+", text.lower())
+    if not urls:
+        return False
+    for url in urls:
+        if any(allowed in url for allowed in OFFICIAL_LINK_ALLOWLIST):
+            continue
+        return True
+    return False
+
+
+def _is_campaign_signal_only(text: str, normalized: str) -> bool:
+    lowered = text.lower()
+    has_campaign = any(tag in lowered for tag in CAMPAIGN_SIGNAL_HASHTAGS) or any(term in normalized for term in CAMPAIGN_SIGNAL_STATUS_TERMS)
+    if not has_campaign:
+        return False
+    return not any(hint in lowered for hint in QUESTION_HINTS)
+
+
+def _is_job_spam(text: str, normalized: str) -> bool:
+    lowered = text.lower()
+    return any(term in normalized or term in lowered for term in JOB_SPAM_TERMS)
+
 def classify_community_message(
     text: str | None,
     *,
@@ -197,8 +236,40 @@ def classify_community_message(
     username: str | None = None,
 ) -> CommunityDecision:
     del user_id, username
+    raw_text = text or ""
+    raw_lower = raw_text.lower()
     normalized = normalize_for_fingerprint(text)
     fingerprint = message_fingerprint(text)
+
+    if _contains_external_url(raw_text):
+        return CommunityDecision(
+            category="spam_or_abuse",
+            intent="external_link_or_affiliate_spam",
+            action="admin_alert",
+            reply=None,
+            emoji=None,
+            buttons=[],
+            admin_alert=True,
+            sensitive=True,
+            confidence=0.9,
+            reason="external_link_no_public_reply",
+            fingerprint=fingerprint,
+        )
+
+    if _is_job_spam(raw_text, normalized):
+        return CommunityDecision(
+            category="spam_or_abuse",
+            intent="job_or_task_spam",
+            action="ignore",
+            reply=None,
+            emoji=None,
+            buttons=[],
+            admin_alert=False,
+            sensitive=False,
+            confidence=0.78,
+            reason="job_spam_no_reply",
+            fingerprint=fingerprint,
+        )
 
     if not normalized:
         return CommunityDecision(
@@ -212,6 +283,21 @@ def classify_community_message(
             sensitive=False,
             confidence=0.2,
             reason="empty_or_non_informative",
+            fingerprint=fingerprint,
+        )
+
+    if _is_campaign_signal_only(raw_text, normalized):
+        return CommunityDecision(
+            category="campaign_signal",
+            intent="campaign_hashtag_signal",
+            action="ignore",
+            reply=None,
+            emoji=None,
+            buttons=[],
+            admin_alert=False,
+            sensitive=False,
+            confidence=0.9,
+            reason="campaign_signal_no_reply",
             fingerprint=fingerprint,
         )
 
@@ -249,6 +335,20 @@ def classify_community_message(
 
     intent = _match_intent(normalized, FAQ_PATTERNS)
     if intent:
+        if intent == "mywin_comeback_tag" and not any(hint in raw_lower for hint in QUESTION_HINTS):
+            return CommunityDecision(
+                category="campaign_signal",
+                intent="campaign_hashtag_signal",
+                action="ignore",
+                reply=None,
+                emoji=None,
+                buttons=[],
+                admin_alert=False,
+                sensitive=False,
+                confidence=0.85,
+                reason="campaign_signal_no_reply",
+                fingerprint=fingerprint,
+            )
         rule = FAQ_RULES[intent]
         emoji = rule.get("emoji")
         if (has_photo or has_video) and intent.startswith("mywin"):
