@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 from pymongo import MongoClient
@@ -10,6 +11,7 @@ from .config import get_settings
 logger = logging.getLogger(__name__)
 
 _client: Optional[MongoClient] = None
+_community_indexes_ready: bool = False
 
 
 def get_db():
@@ -129,3 +131,106 @@ def get_few_shot_examples(category: str, limit: int = 5) -> List[Dict[str, Any]]
     except Exception:
         logger.exception("Failed to fetch few-shot examples for category=%s", category)
         return []
+
+
+def _ensure_community_intelligence_indexes(db) -> None:
+    global _community_indexes_ready
+    if _community_indexes_ready:
+        return
+    try:
+        col = db["community_intelligence_events"]
+        col.create_index([("created_at", -1)], background=True)
+        col.create_index([("chat_id", 1), ("created_at", -1)], background=True)
+        col.create_index([("fingerprint", 1), ("chat_id", 1), ("created_at", -1)], background=True)
+        col.create_index([("intent", 1), ("created_at", -1)], background=True)
+        col.create_index([("sensitive", 1), ("created_at", -1)], background=True)
+        _community_indexes_ready = True
+    except Exception:
+        logger.warning("Community intelligence index setup failed", exc_info=True)
+
+
+def log_community_intelligence_event(doc: Dict[str, Any]) -> None:
+    try:
+        db = get_db()
+        _ensure_community_intelligence_indexes(db)
+        db["community_intelligence_events"].insert_one(doc)
+    except Exception:
+        logger.warning("Failed to persist community intelligence event", exc_info=True)
+
+
+def aggregate_community_helper_events(*, since: datetime, limit: int = 10, sample_limit: int = 5) -> Dict[str, Any]:
+    db = get_db()
+    col = db["community_intelligence_events"]
+    match = {"created_at": {"$gte": since}}
+
+    totals = list(
+        col.aggregate(
+            [
+                {"$match": match},
+                {
+                    "$group": {
+                        "_id": None,
+                        "total": {"$sum": 1},
+                        "would_reply": {"$sum": {"$cond": ["$would_reply", 1, 0]}},
+                        "would_react": {"$sum": {"$cond": ["$would_react", 1, 0]}},
+                        "would_alert_admin": {"$sum": {"$cond": ["$would_alert_admin", 1, 0]}},
+                        "sensitive": {"$sum": {"$cond": ["$sensitive", 1, 0]}},
+                        "unknown": {"$sum": {"$cond": [{"$eq": ["$category", "unknown"]}, 1, 0]}},
+                    }
+                },
+            ]
+        )
+    )
+    base = totals[0] if totals else {"total": 0, "would_reply": 0, "would_react": 0, "would_alert_admin": 0, "sensitive": 0, "unknown": 0}
+
+    def _top(field: str) -> List[Dict[str, Any]]:
+        return list(
+            col.aggregate(
+                [
+                    {"$match": match},
+                    {"$group": {"_id": f"${field}", "count": {"$sum": 1}}},
+                    {"$sort": {"count": -1}},
+                    {"$limit": limit},
+                ]
+            )
+        )
+
+    duplicates = list(
+        col.aggregate(
+            [
+                {"$match": {**match, "fingerprint": {"$ne": None}}},
+                {
+                    "$group": {
+                        "_id": "$fingerprint",
+                        "count": {"$sum": 1},
+                        "sample_text": {"$first": "$text_sample"},
+                        "intent": {"$first": "$intent"},
+                        "category": {"$first": "$category"},
+                    }
+                },
+                {"$match": {"count": {"$gte": 2}}},
+                {"$sort": {"count": -1}},
+                {"$limit": limit},
+            ]
+        )
+    )
+
+    def _samples(filter_doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+        return list(
+            col.find(
+                {**match, **filter_doc},
+                {"intent": 1, "category": 1, "text_sample": 1, "_id": 0},
+                sort=[("created_at", -1)],
+                limit=sample_limit,
+            )
+        )
+
+    return {
+        **base,
+        "unknown_rate": (base["unknown"] / base["total"] * 100.0) if base["total"] else 0.0,
+        "top_intents": _top("intent"),
+        "top_categories": _top("category"),
+        "top_duplicates": duplicates,
+        "sensitive_samples": _samples({"sensitive": True}),
+        "unknown_samples": _samples({"category": "unknown"}),
+    }

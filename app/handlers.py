@@ -1,6 +1,9 @@
 import logging
 import re
 from types import SimpleNamespace
+from datetime import datetime
+from datetime import timedelta
+from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
@@ -33,7 +36,15 @@ from .ai_decision import AIDecisionService
 from .ai_budget import ai_budget_service
 from .ai_reply import AIReplyService
 from .config import get_settings
-from .db import log_message, log_suggestion, log_feedback, get_few_shot_examples
+from .community_intelligence import classify_community_message
+from .db import (
+    log_message,
+    log_suggestion,
+    log_feedback,
+    get_few_shot_examples,
+    log_community_intelligence_event,
+    aggregate_community_helper_events,
+)
 from .engagement_topics import register_engagement_topic_job
 from .openai_client import OpenAIClient
 from .reply_policy import ReplyPolicyService, SEED_REPLIES
@@ -163,7 +174,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     message = update.message
     if message is None:
         return
-    if not getattr(message, "text", None):
+    text = getattr(message, "text", None) or getattr(message, "caption", None)
+    if not text:
         return
     if message.from_user and message.from_user.is_bot:
         return
@@ -171,7 +183,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     settings = get_settings()
-    text = message.text
+    has_photo = bool(getattr(message, "photo", None))
+    has_video = bool(getattr(message, "video", None))
 
     logger.info(
         "Received message chat_id=%s message_id=%s user_id=%s snippet=%s",
@@ -180,6 +193,49 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         message.from_user.id if message.from_user else None,
         text[:80],
     )
+
+    if settings.community_helper_enabled and settings.community_helper_log_only:
+        try:
+            ci_decision = classify_community_message(
+                text,
+                has_photo=has_photo,
+                has_video=has_video,
+                user_id=message.from_user.id if message.from_user else None,
+                username=message.from_user.username if message.from_user else None,
+            )
+            ci_doc = {
+                "created_at": message.date or datetime.utcnow(),
+                "chat_id": message.chat_id,
+                "message_id": message.message_id,
+                "user_id": message.from_user.id if message.from_user else None,
+                "username": message.from_user.username if message.from_user else None,
+                "text_sample": text[:200],
+                "fingerprint": ci_decision.fingerprint,
+                "category": ci_decision.category,
+                "intent": ci_decision.intent,
+                "action": ci_decision.action,
+                "confidence": ci_decision.confidence,
+                "sensitive": ci_decision.sensitive,
+                "admin_alert": ci_decision.admin_alert,
+                "has_photo": has_photo,
+                "has_video": has_video,
+                "would_reply": ci_decision.action in {"reply", "reply_and_admin_alert"},
+                "would_react": bool(ci_decision.emoji),
+                "would_alert_admin": ci_decision.admin_alert,
+                "reason": ci_decision.reason,
+            }
+            log_community_intelligence_event(ci_doc)
+            logger.info(
+                "community_helper_log_only message_id=%s intent=%s action=%s sensitive=%s",
+                message.message_id,
+                ci_decision.intent,
+                ci_decision.action,
+                ci_decision.sensitive,
+            )
+            # TODO(next patch): when live sending is enabled, suppress repeated fingerprint replies for 10 minutes,
+            # emit one admin alert on 5+ duplicate hits within 10 minutes, and apply 1-hour admin alert cooldown.
+        except Exception:
+            logger.warning("community_helper_classification_failed message_id=%s", message.message_id, exc_info=True)
 
     if not settings.enable_tagging:
         logger.info("Tagging disabled; skipping classification")
@@ -570,6 +626,90 @@ async def correct_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await _admin_feedback_handler(update, context, approved=True)
 
 
+def parse_report_window(arg: str | None) -> tuple[timedelta, str]:
+    token = (arg or "").strip().lower()
+    if token == "6h":
+        return timedelta(hours=6), "Last 6h"
+    if token == "24h" or token == "":
+        return timedelta(hours=24), "Last 24h"
+    if token == "7d":
+        return timedelta(days=7), "Last 7d"
+    return timedelta(hours=24), "Last 24h"
+
+
+def _truncate_sample(value: str | None, limit: int = 80) -> str:
+    text = (value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3].rstrip() + "..."
+
+
+def build_community_helper_report(window_label: str, stats: dict) -> str:
+    if not stats.get("total", 0):
+        return f"📊 Community Helper Report — {window_label}\n\nNo telemetry found for this window."
+    lines = [
+        f"📊 Community Helper Report — {window_label}",
+        "",
+        f"Total classified: {stats.get('total', 0)}",
+        f"Would reply: {stats.get('would_reply', 0)}",
+        f"Would react: {stats.get('would_react', 0)}",
+        f"Would alert admin: {stats.get('would_alert_admin', 0)}",
+        f"Sensitive: {stats.get('sensitive', 0)}",
+        f"Unknown: {stats.get('unknown', 0)}",
+        f"Unknown rate: {stats.get('unknown_rate', 0.0):.1f}%",
+        "",
+        "Top intents:",
+    ]
+    for i, item in enumerate(stats.get("top_intents", [])[:10], start=1):
+        lines.append(f"{i}. {item.get('_id') or 'none'} — {item.get('count', 0)}")
+    lines.append("")
+    lines.append("Top categories:")
+    for i, item in enumerate(stats.get("top_categories", [])[:10], start=1):
+        lines.append(f"{i}. {item.get('_id') or 'none'} — {item.get('count', 0)}")
+    lines.append("")
+    lines.append("Top duplicate messages:")
+    for i, item in enumerate(stats.get("top_duplicates", [])[:10], start=1):
+        lines.append(
+            f"{i}. \"{escape(_truncate_sample(item.get('sample_text')))}\" — {item.get('count', 0)} times — {item.get('intent') or item.get('category') or 'unknown'}"
+        )
+    lines.append("")
+    lines.append("Sensitive samples:")
+    for item in stats.get("sensitive_samples", [])[:5]:
+        lines.append(f"- {item.get('intent') or item.get('category') or 'unknown'}: \"{escape(_truncate_sample(item.get('text_sample')))}\"")
+    lines.append("")
+    lines.append("Unknown samples:")
+    for item in stats.get("unknown_samples", [])[:5]:
+        lines.append(f"- \"{escape(_truncate_sample(item.get('text_sample')))}\"")
+    return "\n".join(lines)[:3900]
+
+
+def _is_admin_message(message, settings) -> bool:
+    if message is None:
+        return False
+    if settings.admin_chat_id and message.chat_id == settings.admin_chat_id:
+        return True
+    return False
+
+
+async def community_helper_report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings = get_settings()
+    message = update.message
+    if message is None:
+        return
+    if not _is_admin_message(message, settings):
+        await message.reply_text("This command is admin-only.")
+        return
+    window, label = parse_report_window(context.args[0] if context.args else None)
+    since = datetime.utcnow() - window
+    try:
+        stats = aggregate_community_helper_events(since=since)
+    except Exception:
+        logger.warning("community_helper_report_failed", exc_info=True)
+        await message.reply_text("Could not generate community helper report right now.")
+        return
+    await message.reply_text(build_community_helper_report(label, stats), parse_mode="HTML")
+
+
 def setup_application():
     settings = get_settings()
     _get_ai_runtime(settings)
@@ -578,6 +718,7 @@ def setup_application():
     application.add_handler(CommandHandler("approve", approve_handler))
     application.add_handler(CommandHandler("reject", reject_handler))
     application.add_handler(CommandHandler("correct", correct_handler))
+    application.add_handler(CommandHandler("community_helper_report", community_helper_report_handler))
     register_engagement_topic_job(application)
     return application
 
