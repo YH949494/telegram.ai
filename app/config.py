@@ -98,6 +98,13 @@ class Settings(BaseSettings):
     community_faq_reply_enabled: bool = Field(False, env="COMMUNITY_FAQ_REPLY_ENABLED")
     community_reactions_enabled: bool = Field(False, env="COMMUNITY_REACTIONS_ENABLED")
     community_admin_alerts_enabled: bool = Field(False, env="COMMUNITY_ADMIN_ALERTS_ENABLED")
+    community_live_allowed_intents_raw: str = Field(
+        "voucher_where_to_enter,voucher_code_incorrect,voucher_not_working",
+        env="COMMUNITY_LIVE_ALLOWED_INTENTS",
+    )
+    community_reply_user_cooldown_sec: int = Field(300, env="COMMUNITY_REPLY_USER_COOLDOWN_SEC")
+    community_reply_fingerprint_cooldown_sec: int = Field(600, env="COMMUNITY_REPLY_FINGERPRINT_COOLDOWN_SEC")
+    community_reply_chat_cap_10m: int = Field(5, env="COMMUNITY_REPLY_CHAT_CAP_10M")
 
     auto_reply_categories: Set[str] = Field(
         default_factory=lambda: {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
@@ -144,6 +151,14 @@ class Settings(BaseSettings):
                 continue
             out.append(int(part))
         return out
+
+    @property
+    def community_live_allowed_intents(self) -> Set[str]:
+        return {
+            intent.strip()
+            for intent in (self.community_live_allowed_intents_raw or "").split(",")
+            if intent.strip()
+        }
 
     @validator("ai_decision_confidence_threshold")
     def ai_threshold_in_range(cls, value: float):

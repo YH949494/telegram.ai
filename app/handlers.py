@@ -44,6 +44,8 @@ from .db import (
     get_few_shot_examples,
     log_community_intelligence_event,
     aggregate_community_helper_events,
+    log_community_helper_reply_event,
+    count_recent_community_helper_replies,
 )
 from .engagement_posts import register_engagement_jobs, record_chat_activity
 from .engagement_topics import register_engagement_topic_job
@@ -61,6 +63,22 @@ RECOMMENDATION_PATTERNS = [r"\brecommend(?:ed|ation)?\b", r"max\s*win", r"this\s
 RESULT_PATTERNS = [r"\bi\s+won\b", r"\bmy\s+win\b", r"\bcashed?\s*out\b", r"\bjackpot\b", r"\bwon\s+\d+(?:\.\d+)?x?\b", r"中奖", r"赢了"]
 SUPPORT_PATTERNS = [r"\bvoucher\b", r"\bpromo\b", r"\bissue\b", r"\berror\b", r"\bcan't\b", r"无法", r"失败"]
 NEW_USER_PATTERNS = [r"\bi'?m\s+new\b", r"\bi\s+am\s+new\b", r"\bjust\s+joined\b", r"\bnew\s+(?:here|member)\b", r"新人", r"新来的?", r"刚加入"]
+_BLOCKED_LIVE_INTENT_PREFIXES = ("mywin_", "free_spin_")
+_BLOCKED_LIVE_INTENTS = {"campaign_hashtag_signal", "new_user_start", "spam_or_abuse", "sensitive", "unknown"}
+
+
+def _community_button_text_url(btn):
+    text = None
+    url = None
+    if isinstance(btn, dict):
+        text = btn.get("text")
+        url = btn.get("url")
+    else:
+        text = getattr(btn, "text", None)
+        url = getattr(btn, "url", None)
+    text = text.strip() if isinstance(text, str) and text.strip() else None
+    url = url.strip() if isinstance(url, str) and url.strip() else None
+    return text, url
 
 
 def _prepare_reply_payload(payload, allow_button: bool = False):
@@ -222,7 +240,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         text[:80],
     )
 
-    if settings.community_helper_enabled and settings.community_helper_log_only:
+    if settings.community_helper_enabled:
         try:
             ci_decision = classify_community_message(
                 text,
@@ -253,15 +271,97 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 "reason": ci_decision.reason,
             }
             log_community_intelligence_event(ci_doc)
-            logger.info(
-                "community_helper_log_only message_id=%s intent=%s action=%s sensitive=%s",
-                message.message_id,
-                ci_decision.intent,
-                ci_decision.action,
-                ci_decision.sensitive,
-            )
-            # TODO(next patch): when live sending is enabled, suppress repeated fingerprint replies for 10 minutes,
-            # emit one admin alert on 5+ duplicate hits within 10 minutes, and apply 1-hour admin alert cooldown.
+            if settings.community_helper_log_only:
+                logger.info(
+                    "community_helper_log_only message_id=%s intent=%s action=%s sensitive=%s",
+                    message.message_id,
+                    ci_decision.intent,
+                    ci_decision.action,
+                    ci_decision.sensitive,
+                )
+            elif settings.community_faq_reply_enabled:
+                now = normalize_utc_datetime(getattr(message, "date", None)) or utc_now()
+                intent = ci_decision.intent or ""
+                can_send = (
+                    ci_decision.action == "reply"
+                    and bool(intent)
+                    and intent in settings.community_live_allowed_intents
+                    and bool(ci_decision.reply)
+                    and not ci_decision.sensitive
+                    and not ci_decision.admin_alert
+                )
+                suppress_reason = None
+                if not can_send:
+                    if not intent or intent not in settings.community_live_allowed_intents:
+                        suppress_reason = "not_allowed_intent"
+                    elif not ci_decision.reply:
+                        suppress_reason = "no_reply"
+                    elif ci_decision.sensitive:
+                        suppress_reason = "sensitive"
+                    else:
+                        suppress_reason = "disabled"
+                if intent in _BLOCKED_LIVE_INTENTS or intent.startswith(_BLOCKED_LIVE_INTENT_PREFIXES):
+                    can_send = False
+                    suppress_reason = "not_allowed_intent"
+
+                if can_send:
+                    try:
+                        if count_recent_community_helper_replies(
+                            since=now - timedelta(seconds=settings.community_reply_fingerprint_cooldown_sec),
+                            chat_id=message.chat_id,
+                            fingerprint=ci_decision.fingerprint,
+                        ) > 0:
+                            can_send = False
+                            suppress_reason = "duplicate_fingerprint"
+                        elif count_recent_community_helper_replies(
+                            since=now - timedelta(seconds=settings.community_reply_user_cooldown_sec),
+                            user_id=message.from_user.id if message.from_user else None,
+                        ) > 0:
+                            can_send = False
+                            suppress_reason = "user_cooldown"
+                        elif count_recent_community_helper_replies(
+                            since=now - timedelta(minutes=10),
+                            chat_id=message.chat_id,
+                        ) >= settings.community_reply_chat_cap_10m:
+                            can_send = False
+                            suppress_reason = "chat_cap"
+                    except Exception:
+                        can_send = False
+                        suppress_reason = "disabled"
+                        logger.warning("community_helper_live_db_check_failed message_id=%s", message.message_id, exc_info=True)
+
+                reply_sent = False
+                button_count = len(ci_decision.buttons or [])
+                try:
+                    if can_send:
+                        reply_markup = None
+                        if ci_decision.buttons:
+                            rows = []
+                            for btn in ci_decision.buttons:
+                                btn_text, btn_url = _community_button_text_url(btn)
+                                if btn_text and btn_url:
+                                    rows.append([InlineKeyboardButton(text=btn_text, url=btn_url)])
+                            if rows:
+                                reply_markup = InlineKeyboardMarkup(rows)
+                        await message.reply_text(ci_decision.reply, reply_markup=reply_markup)
+                        reply_sent = True
+                    log_community_helper_reply_event({
+                        "created_at": now,
+                        "chat_id": message.chat_id,
+                        "message_id": message.message_id,
+                        "user_id": message.from_user.id if message.from_user else None,
+                        "username": message.from_user.username if message.from_user else None,
+                        "fingerprint": ci_decision.fingerprint,
+                        "intent": ci_decision.intent,
+                        "category": ci_decision.category,
+                        "reply_sent": reply_sent,
+                        "suppressed": not reply_sent,
+                        "suppress_reason": None if reply_sent else suppress_reason,
+                        "reply_text_sample": (ci_decision.reply or "")[:200],
+                        "button_count": button_count,
+                    })
+                except Exception:
+                    logger.warning("community_helper_live_reply_failed message_id=%s", message.message_id, exc_info=True)
         except Exception:
             logger.warning("community_helper_classification_failed message_id=%s", message.message_id, exc_info=True)
 
