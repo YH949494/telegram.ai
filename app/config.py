@@ -79,7 +79,7 @@ class Settings(BaseSettings):
 
     engagement_posts_enabled: bool = Field(False, env="ENGAGEMENT_POSTS_ENABLED")
     engagement_posts_dry_run: bool = Field(True, env="ENGAGEMENT_POSTS_DRY_RUN")
-    engagement_target_chat_ids: List[int] = Field(default_factory=list, env="ENGAGEMENT_TARGET_CHAT_IDS")
+    engagement_target_chat_ids_raw: str = Field("", env="ENGAGEMENT_TARGET_CHAT_IDS")
     engagement_timezone: str = Field("Asia/Kuala_Lumpur", env="ENGAGEMENT_TIMEZONE")
     engagement_daily_max_posts: int = Field(4, env="ENGAGEMENT_DAILY_MAX_POSTS")
     engagement_min_gap_minutes: int = Field(120, env="ENGAGEMENT_MIN_GAP_MINUTES")
@@ -133,19 +133,17 @@ class Settings(BaseSettings):
 
 
 
-    @validator("engagement_target_chat_ids", pre=True)
-    def parse_engagement_target_chat_ids(cls, value):
-        if value in (None, "", []):
-            return []
-        if isinstance(value, str):
-            out = []
-            for part in value.split(","):
-                part = part.strip()
-                if not part:
-                    continue
-                out.append(int(part))
-            return out
-        return value
+
+
+    @property
+    def engagement_target_chat_ids(self) -> List[int]:
+        out: List[int] = []
+        for part in (self.engagement_target_chat_ids_raw or "").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            out.append(int(part))
+        return out
 
     @validator("ai_decision_confidence_threshold")
     def ai_threshold_in_range(cls, value: float):
