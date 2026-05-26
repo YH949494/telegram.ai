@@ -44,6 +44,7 @@ from .db import (
     log_community_intelligence_event,
     aggregate_community_helper_events,
 )
+from .engagement_posts import register_engagement_jobs, record_chat_activity
 from .engagement_topics import register_engagement_topic_job
 from .openai_client import OpenAIClient
 from .reply_policy import ReplyPolicyService, SEED_REPLIES
@@ -183,6 +184,12 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     settings = get_settings()
+    if getattr(settings, "engagement_posts_enabled", False):
+        try:
+            record_chat_activity(chat_id=message.chat_id, message_at=normalize_utc_datetime(getattr(message, "date", None)) or utc_now())
+        except Exception:
+            logger.warning("chat_activity_record_failed chat_id=%s message_id=%s", message.chat_id, message.message_id, exc_info=True)
+
     has_photo = bool(getattr(message, "photo", None))
     has_video = bool(getattr(message, "video", None))
 
@@ -720,6 +727,7 @@ def setup_application():
     application.add_handler(CommandHandler("correct", correct_handler))
     application.add_handler(CommandHandler("community_helper_report", community_helper_report_handler))
     register_engagement_topic_job(application)
+    register_engagement_jobs(application)
     return application
 
 

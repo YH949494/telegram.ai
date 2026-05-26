@@ -76,6 +76,23 @@ class Settings(BaseSettings):
     engagement_topic_scheduler_interval_hours: int = Field(6, env="ENGAGEMENT_TOPIC_SCHEDULER_INTERVAL_HOURS")
     engagement_topic_openai_model: str = Field("gpt-4o-mini", env="ENGAGEMENT_TOPIC_OPENAI_MODEL")
 
+
+    engagement_posts_enabled: bool = Field(False, env="ENGAGEMENT_POSTS_ENABLED")
+    engagement_posts_dry_run: bool = Field(True, env="ENGAGEMENT_POSTS_DRY_RUN")
+    engagement_target_chat_ids: List[int] = Field(default_factory=list, env="ENGAGEMENT_TARGET_CHAT_IDS")
+    engagement_timezone: str = Field("Asia/Kuala_Lumpur", env="ENGAGEMENT_TIMEZONE")
+    engagement_daily_max_posts: int = Field(4, env="ENGAGEMENT_DAILY_MAX_POSTS")
+    engagement_min_gap_minutes: int = Field(120, env="ENGAGEMENT_MIN_GAP_MINUTES")
+    engagement_inactivity_revive_enabled: bool = Field(False, env="ENGAGEMENT_INACTIVITY_REVIVE_ENABLED")
+    engagement_inactivity_minutes: int = Field(120, env="ENGAGEMENT_INACTIVITY_MINUTES")
+    engagement_revive_cooldown_minutes: int = Field(360, env="ENGAGEMENT_REVIVE_COOLDOWN_MINUTES")
+    engagement_native_polls_enabled: bool = Field(True, env="ENGAGEMENT_NATIVE_POLLS_ENABLED")
+    engagement_default_disable_notification: bool = Field(False, env="ENGAGEMENT_DEFAULT_DISABLE_NOTIFICATION")
+    engagement_quiet_hours_enabled: bool = Field(True, env="ENGAGEMENT_QUIET_HOURS_ENABLED")
+    engagement_quiet_start_hour: int = Field(2, env="ENGAGEMENT_QUIET_START_HOUR")
+    engagement_quiet_end_hour: int = Field(8, env="ENGAGEMENT_QUIET_END_HOUR")
+    engagement_revive_daily_max_posts: int = Field(1, env="ENGAGEMENT_REVIVE_DAILY_MAX_POSTS")
+    engagement_scheduler_jitter_seconds: int = Field(300, env="ENGAGEMENT_SCHEDULER_JITTER_SECONDS")
     community_helper_enabled: bool = Field(False, env="COMMUNITY_HELPER_ENABLED")
     community_helper_log_only: bool = Field(True, env="COMMUNITY_HELPER_LOG_ONLY")
     community_faq_reply_enabled: bool = Field(False, env="COMMUNITY_FAQ_REPLY_ENABLED")
@@ -114,6 +131,21 @@ class Settings(BaseSettings):
             raise ValueError(f"{field.name} must be >= 0")
         return value
 
+
+
+    @validator("engagement_target_chat_ids", pre=True)
+    def parse_engagement_target_chat_ids(cls, value):
+        if value in (None, "", []):
+            return []
+        if isinstance(value, str):
+            out = []
+            for part in value.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                out.append(int(part))
+            return out
+        return value
 
     @validator("ai_decision_confidence_threshold")
     def ai_threshold_in_range(cls, value: float):
