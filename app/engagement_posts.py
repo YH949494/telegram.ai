@@ -256,16 +256,28 @@ def _supports_jitter(job_queue) -> bool:
 
 def register_engagement_jobs(application) -> None:
     settings = get_settings()
+    if not settings.engagement_posts_enabled:
+        return
+
+    job_queue = getattr(application, "job_queue", None)
+    if not job_queue:
+        logger.warning(
+            "[ENGAGEMENT][DISABLED] job_queue_missing; "
+            "install python-telegram-bot[job-queue] "
+            "or disable ENGAGEMENT_POSTS_ENABLED"
+        )
+        return
+
     ensure_engagement_indexes()
-    jitter_supported = _supports_jitter(application.job_queue)
+    jitter_supported = _supports_jitter(job_queue)
     common_kwargs = {"interval": timedelta(minutes=15)}
     if jitter_supported:
         common_kwargs["jitter"] = int(settings.engagement_scheduler_jitter_seconds)
 
-    if not application.job_queue.get_jobs_by_name("engagement_posts_tick"):
-        application.job_queue.run_repeating(run_engagement_posts_tick, first=20, name="engagement_posts_tick", **common_kwargs)
-    if not application.job_queue.get_jobs_by_name("engagement_inactivity_revive_tick"):
-        application.job_queue.run_repeating(
+    if not job_queue.get_jobs_by_name("engagement_posts_tick"):
+        job_queue.run_repeating(run_engagement_posts_tick, first=20, name="engagement_posts_tick", **common_kwargs)
+    if not job_queue.get_jobs_by_name("engagement_inactivity_revive_tick"):
+        job_queue.run_repeating(
             run_engagement_inactivity_revive_tick,
             first=40,
             name="engagement_inactivity_revive_tick",
