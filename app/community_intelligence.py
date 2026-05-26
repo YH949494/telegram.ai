@@ -305,14 +305,14 @@ def classify_community_message(
         return CommunityDecision(
             category="spam_or_abuse",
             intent="obfuscated_promo_spam",
-            action="admin_alert",
+            action="ignore",
             reply=None,
             emoji=None,
             buttons=[],
-            admin_alert=True,
-            sensitive=True,
+            admin_alert=False,
+            sensitive=False,
             confidence=0.91,
-            reason="obfuscated_promo_no_public_reply",
+            reason="t22_moderated_spam_no_reply",
             fingerprint=fingerprint,
         )
 

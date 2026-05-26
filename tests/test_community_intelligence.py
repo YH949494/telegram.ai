@@ -136,15 +136,16 @@ class CommunityIntelligenceTests(unittest.TestCase):
         self.assertEqual(d2.intent, "job_or_task_spam")
         self.assertEqual(d2.action, "ignore")
 
-    def test_obfuscated_promo_spam_admin_alert_no_reply(self):
+    def test_obfuscated_promo_spam_ignored_no_reply(self):
         spam = classify_community_message("💲 5️⃣0️⃣ 🅰️🅰️🅰️🅰️ 🌟 🅰️🅰️🅰️🅰️ ... Stаrt and rеcеivе yоur gi...")
         self.assertEqual(spam.intent, "obfuscated_promo_spam")
         self.assertEqual(spam.category, "spam_or_abuse")
-        self.assertEqual(spam.action, "admin_alert")
-        self.assertTrue(spam.admin_alert)
-        self.assertTrue(spam.sensitive)
+        self.assertEqual(spam.action, "ignore")
+        self.assertFalse(spam.admin_alert)
+        self.assertFalse(spam.sensitive)
         self.assertIsNone(spam.reply)
         self.assertGreaterEqual(spam.confidence, 0.8)
+        self.assertEqual(spam.reason, "t22_moderated_spam_no_reply")
 
     def test_short_normal_chat_remains_unknown(self):
         d = classify_community_message("Kuy")
