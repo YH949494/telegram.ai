@@ -5,6 +5,7 @@ from datetime import timedelta
 from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji, Update
+from telegram.error import BadRequest
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 try:
@@ -84,13 +85,32 @@ async def safe_add_reaction(
     message_id: int,
     emoji: str,
     flow: str,
-) -> None:
+) -> bool:
     try:
         await bot.set_message_reaction(
             chat_id=chat_id,
             message_id=message_id,
             reaction=[ReactionTypeEmoji(emoji=emoji)],
         )
+        return True
+    except BadRequest as exc:
+        if "Reaction_invalid" in str(exc):
+            logger.info(
+                "reaction_invalid_skipped chat_id=%s message_id=%s emoji=%s",
+                chat_id,
+                message_id,
+                emoji,
+            )
+            return False
+        logger.warning(
+            "Failed to add reaction chat_id=%s message_id=%s flow=%s emoji=%s",
+            chat_id,
+            message_id,
+            flow,
+            emoji,
+            exc_info=True,
+        )
+        return False
     except Exception:
         logger.warning(
             "Failed to add reaction chat_id=%s message_id=%s flow=%s emoji=%s",
@@ -100,6 +120,7 @@ async def safe_add_reaction(
             emoji,
             exc_info=True,
         )
+        return False
 
 
 def _build_ai_services(settings):
