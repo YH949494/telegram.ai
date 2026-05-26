@@ -82,9 +82,17 @@ class CommunityIntelligenceTests(unittest.TestCase):
     def test_campaign_hashtag_signals_no_reply(self):
         samples = [
             "#ComebackIsReal",
+            "#ComebacklsReal",
+            "ComebacklsReal",
+            "comeback is real",
             "#MYWIN",
             "#mywin",
             "#claimcode",
+            "AdvantPaly Gold,✅",
+            "AdvantPlay Gold ✅",
+            "\"AdvantPlay Gold ✅\" 🥇",
+            "#MyWin\nAdvantPlay Gold ✅",
+            "VIP advantplay win” + share result 👑",
             "Silver spin secured #ComebackIsReal",
             "#MYWIN Silver spin secured #ComebackIsReal",
             "Bronze locked 🔥 AdvantPlay",
@@ -94,6 +102,7 @@ class CommunityIntelligenceTests(unittest.TestCase):
             self.assertEqual(d.intent, "campaign_hashtag_signal")
             self.assertEqual(d.action, "ignore")
             self.assertIsNone(d.reply)
+            self.assertFalse(d.admin_alert)
 
     def test_real_mywin_questions_still_reply(self):
         d1 = classify_community_message("what hashtags do I use for MyWin")
@@ -126,6 +135,22 @@ class CommunityIntelligenceTests(unittest.TestCase):
         d2 = classify_community_message("part time job task team")
         self.assertEqual(d2.intent, "job_or_task_spam")
         self.assertEqual(d2.action, "ignore")
+
+    def test_obfuscated_promo_spam_admin_alert_no_reply(self):
+        spam = classify_community_message("💲 5️⃣0️⃣ 🅰️🅰️🅰️🅰️ 🌟 🅰️🅰️🅰️🅰️ ... Stаrt and rеcеivе yоur gi...")
+        self.assertEqual(spam.intent, "obfuscated_promo_spam")
+        self.assertEqual(spam.category, "spam_or_abuse")
+        self.assertEqual(spam.action, "admin_alert")
+        self.assertTrue(spam.admin_alert)
+        self.assertTrue(spam.sensitive)
+        self.assertIsNone(spam.reply)
+        self.assertGreaterEqual(spam.confidence, 0.8)
+
+    def test_short_normal_chat_remains_unknown(self):
+        d = classify_community_message("Kuy")
+        self.assertEqual(d.category, "unknown")
+        self.assertEqual(d.action, "ignore")
+        self.assertIsNone(d.intent)
 
     def test_fingerprint_and_normalization(self):
         self.assertIsNone(message_fingerprint(None))

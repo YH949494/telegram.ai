@@ -139,6 +139,20 @@ QUESTION_HINTS = [
 CAMPAIGN_SIGNAL_HASHTAGS = ["#comebackisreal", "#mywin", "#claimcode"]
 CAMPAIGN_SIGNAL_STATUS_TERMS = ["silver spin secured", "bronze locked", "advantplay"]
 JOB_SPAM_TERMS = ["warehouse", "job", "task", "team people", "выполнение задач", "скла", "ищу", "kerja", "part time", "sambilan"]
+CAMPAIGN_SIGNAL_VARIANTS = [
+    "comeback is real",
+    "comebackisreal",
+    "comebacklsreal",
+    "advantplay gold",
+    "advantpaly gold",
+    "vip advantplay win",
+]
+OBFUSCATED_PROMO_TERMS = [
+    "start and receive",
+    "start receive",
+    "receive your gift",
+    "recеivе your gi",
+]
 
 OFFICIAL_LINK_ALLOWLIST = [
     "t.me/advantplayofficial",
@@ -217,7 +231,14 @@ def _contains_external_url(text: str) -> bool:
 
 def _is_campaign_signal_only(text: str, normalized: str) -> bool:
     lowered = text.lower()
-    has_campaign = any(tag in lowered for tag in CAMPAIGN_SIGNAL_HASHTAGS) or any(term in normalized for term in CAMPAIGN_SIGNAL_STATUS_TERMS)
+    compact = re.sub(r"[^a-z0-9#]+", "", lowered)
+    has_campaign = (
+        any(tag in lowered for tag in CAMPAIGN_SIGNAL_HASHTAGS)
+        or any(term in normalized for term in CAMPAIGN_SIGNAL_STATUS_TERMS)
+        or any(variant in lowered or variant in normalized for variant in CAMPAIGN_SIGNAL_VARIANTS)
+        or "#comebacklsreal" in compact
+        or "comebacklsreal" in compact
+    )
     if not has_campaign:
         return False
     return not any(hint in lowered for hint in QUESTION_HINTS)
@@ -226,6 +247,15 @@ def _is_campaign_signal_only(text: str, normalized: str) -> bool:
 def _is_job_spam(text: str, normalized: str) -> bool:
     lowered = text.lower()
     return any(term in normalized or term in lowered for term in JOB_SPAM_TERMS)
+
+
+def _is_obfuscated_promo_spam(text: str, normalized: str) -> bool:
+    lowered = text.lower()
+    enclosed_a_count = text.count("🅰️") + text.count("🅰")
+    emoji_currency_count = sum(lowered.count(symbol) for symbol in ["💲", "💵", "💰", "5️⃣", "0️⃣"])
+    has_phrase = any(term in lowered or term in normalized for term in OBFUSCATED_PROMO_TERMS)
+    stylized_pattern = enclosed_a_count >= 4 and emoji_currency_count >= 3
+    return has_phrase or stylized_pattern
 
 def classify_community_message(
     text: str | None,
@@ -268,6 +298,21 @@ def classify_community_message(
             sensitive=False,
             confidence=0.78,
             reason="job_spam_no_reply",
+            fingerprint=fingerprint,
+        )
+
+    if _is_obfuscated_promo_spam(raw_text, normalized):
+        return CommunityDecision(
+            category="spam_or_abuse",
+            intent="obfuscated_promo_spam",
+            action="admin_alert",
+            reply=None,
+            emoji=None,
+            buttons=[],
+            admin_alert=True,
+            sensitive=True,
+            confidence=0.91,
+            reason="obfuscated_promo_no_public_reply",
             fingerprint=fingerprint,
         )
 
