@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 _client: Optional[MongoClient] = None
 _community_indexes_ready: bool = False
+_community_reply_indexes_ready: bool = False
 
 
 def get_db():
@@ -149,6 +150,21 @@ def _ensure_community_intelligence_indexes(db) -> None:
         logger.warning("Community intelligence index setup failed", exc_info=True)
 
 
+def _ensure_community_reply_event_indexes(db) -> None:
+    global _community_reply_indexes_ready
+    if _community_reply_indexes_ready:
+        return
+    try:
+        col = db["community_helper_reply_events"]
+        col.create_index([("created_at", -1)], background=True)
+        col.create_index([("chat_id", 1), ("created_at", -1)], background=True)
+        col.create_index([("chat_id", 1), ("fingerprint", 1), ("created_at", -1)], background=True)
+        col.create_index([("user_id", 1), ("created_at", -1)], background=True)
+        _community_reply_indexes_ready = True
+    except Exception:
+        logger.warning("Community helper reply index setup failed", exc_info=True)
+
+
 def log_community_intelligence_event(doc: Dict[str, Any]) -> None:
     try:
         db = get_db()
@@ -156,6 +172,25 @@ def log_community_intelligence_event(doc: Dict[str, Any]) -> None:
         db["community_intelligence_events"].insert_one(doc)
     except Exception:
         logger.warning("Failed to persist community intelligence event", exc_info=True)
+
+
+def log_community_helper_reply_event(doc: Dict[str, Any]) -> None:
+    db = get_db()
+    _ensure_community_reply_event_indexes(db)
+    db["community_helper_reply_events"].insert_one(doc)
+
+
+def count_recent_community_helper_replies(*, since: datetime, chat_id: Optional[int] = None, user_id: Optional[int] = None, fingerprint: Optional[str] = None) -> int:
+    db = get_db()
+    _ensure_community_reply_event_indexes(db)
+    query: Dict[str, Any] = {"created_at": {"$gte": since}, "reply_sent": True}
+    if chat_id is not None:
+        query["chat_id"] = chat_id
+    if user_id is not None:
+        query["user_id"] = user_id
+    if fingerprint:
+        query["fingerprint"] = fingerprint
+    return db["community_helper_reply_events"].count_documents(query, limit=1 if fingerprint or user_id else 0)
 
 
 def aggregate_community_helper_events(*, since: datetime, limit: int = 10, sample_limit: int = 5) -> Dict[str, Any]:
