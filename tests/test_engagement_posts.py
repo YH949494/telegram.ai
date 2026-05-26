@@ -134,6 +134,21 @@ class EngagementPostsTests(unittest.IsolatedAsyncioTestCase):
             await engagement_posts.run_engagement_posts_tick(types.SimpleNamespace(bot=types.SimpleNamespace(send_message=AsyncMock())))
         self.assertEqual(ensure_idx.call_count, 0)
 
+
+    def test_register_jobs_missing_job_queue_does_not_crash(self):
+        app = types.SimpleNamespace(job_queue=None)
+        with patch("app.engagement_posts.get_settings", return_value=self._settings()), patch("app.engagement_posts.logger.warning") as warn, patch("app.engagement_posts.ensure_engagement_indexes") as ensure_idx:
+            engagement_posts.register_engagement_jobs(app)
+        self.assertEqual(ensure_idx.call_count, 0)
+        self.assertEqual(warn.call_count, 1)
+
+    def test_register_jobs_disabled_exits_early_even_if_job_queue_missing(self):
+        app = types.SimpleNamespace(job_queue=None)
+        with patch("app.engagement_posts.get_settings", return_value=self._settings(engagement_posts_enabled=False)), patch("app.engagement_posts.logger.warning") as warn, patch("app.engagement_posts.ensure_engagement_indexes") as ensure_idx:
+            engagement_posts.register_engagement_jobs(app)
+        self.assertEqual(ensure_idx.call_count, 0)
+        self.assertEqual(warn.call_count, 0)
+
     def test_register_jobs_independent_and_jitter_supported(self):
         class JQ:
             def __init__(self): self.calls=[]
