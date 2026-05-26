@@ -7,6 +7,7 @@ from app.classifier import classify
 from app.reply_policy import ReplyPolicyResult
 from app.responses import generate_reply, get_reaction
 from app.seed_rotation import SeedItem, SeedRotationService
+from telegram.error import BadRequest
 
 
 class DummyUser:
@@ -60,6 +61,21 @@ def make_settings(**kwargs):
 
 
 class HandlerFlowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_safe_add_reaction_skips_reaction_invalid(self):
+        bot = types.SimpleNamespace(set_message_reaction=AsyncMock(side_effect=BadRequest("Reaction_invalid")))
+
+        with self.assertLogs("app.handlers", level="INFO") as logs:
+            result = await handlers.safe_add_reaction(
+                bot=bot,
+                chat_id=999,
+                message_id=1001,
+                emoji="🔥",
+                flow="unit_test",
+            )
+
+        self.assertFalse(result)
+        self.assertIn("reaction_invalid_skipped chat_id=999 message_id=1001 emoji=🔥", logs.output[0])
+
     async def test_deterministic_new_user_still_sends(self):
         settings = make_settings(enable_ai_decision=False)
         update = types.SimpleNamespace(message=DummyMessage("hi im new"))
