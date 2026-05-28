@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 import re
 from types import SimpleNamespace
 from datetime import timedelta
@@ -63,6 +64,113 @@ RECOMMENDATION_PATTERNS = [r"\brecommend(?:ed|ation)?\b", r"max\s*win", r"this\s
 RESULT_PATTERNS = [r"\bi\s+won\b", r"\bmy\s+win\b", r"\bcashed?\s*out\b", r"\bjackpot\b", r"\bwon\s+\d+(?:\.\d+)?x?\b", r"中奖", r"赢了"]
 SUPPORT_PATTERNS = [r"\bvoucher\b", r"\bpromo\b", r"\bissue\b", r"\berror\b", r"\bcan't\b", r"无法", r"失败"]
 NEW_USER_PATTERNS = [r"\bi'?m\s+new\b", r"\bi\s+am\s+new\b", r"\bjust\s+joined\b", r"\bnew\s+(?:here|member)\b", r"新人", r"新来的?", r"刚加入"]
+
+
+WELCOME_TEXT = (
+    "Welcome to AdvantPlay!\n\n"
+    "Play smarter. Earn rewards. Join the community.\n\n"
+    "✅ Daily drops & events\n"
+    "✅ Community rewards\n"
+    "✅ Weekly leaderboard & XP\n"
+    "✅ Exclusive member perks\n\n"
+    "Start by claiming your first $1 welcome code 👇"
+)
+WELCOME_BUTTON_TEXT = "Claim Your $1"
+WELCOME_BUTTON_URL = "https://t.me/APreferralV1_bot?start=start"
+WELCOME_DELETE_DELAY_SECONDS = 180
+
+
+
+
+def _build_welcome_mentions(members, limit: int = 5) -> tuple[str, int]:
+    mentions = []
+    for member in members[:limit]:
+        username = getattr(member, "username", None)
+        if username:
+            mentions.append(f"@{username}")
+        else:
+            mentions.append(member.mention_html())
+    return " ".join(mentions), len(mentions)
+
+
+def _is_welcome_chat_allowed(chat_id: int, target_chat_id) -> bool:
+    if target_chat_id is None:
+        return True
+    return chat_id == target_chat_id
+
+
+async def _send_welcome_message(message, welcome_text: str, keyboard, image_path: str):
+    try:
+        with Path(image_path).open("rb") as photo_file:
+            return await message.reply_photo(
+                photo=photo_file,
+                caption=welcome_text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+    except Exception:
+        logger.warning(
+            "welcome_image_send_failed chat_id=%s message_id=%s image_path=%s",
+            message.chat_id,
+            message.message_id,
+            image_path,
+            exc_info=True,
+        )
+        return await message.reply_text(welcome_text, reply_markup=keyboard, parse_mode="HTML")
+
+
+async def delete_message_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    data = context.job.data if context.job else {}
+    chat_id = data.get("chat_id")
+    message_id = data.get("message_id")
+    if chat_id is None or message_id is None:
+        logger.warning("welcome_delete_job_missing_payload")
+        return
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+        logger.info("welcome_message_deleted chat_id=%s message_id=%s", chat_id, message_id)
+    except Exception:
+        # Fail-safe: ignore deletion failures (e.g., missing permission / message already deleted).
+        logger.info("welcome_message_delete_skipped chat_id=%s message_id=%s", chat_id, message_id)
+
+
+async def welcome_new_members_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message
+    if message is None or not message.new_chat_members:
+        return
+
+    settings = get_settings()
+    if not _is_welcome_chat_allowed(message.chat_id, settings.welcome_target_chat_id):
+        logger.info("welcome_skipped_chat_not_allowed chat_id=%s target_chat_id=%s", message.chat_id, settings.welcome_target_chat_id)
+        return
+
+    human_members = [member for member in message.new_chat_members if not member.is_bot]
+    if not human_members:
+        logger.info("welcome_skipped_no_human_members chat_id=%s message_id=%s", message.chat_id, message.message_id)
+        return
+
+    mentions_text, mentioned_count = _build_welcome_mentions(human_members, limit=5)
+    logger.info(
+        "welcome_members_grouped chat_id=%s join_message_id=%s human_count=%s mentioned_count=%s",
+        message.chat_id,
+        message.message_id,
+        len(human_members),
+        mentioned_count,
+    )
+
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(text=WELCOME_BUTTON_TEXT, url=WELCOME_BUTTON_URL)]])
+    welcome_text = f"🎉 Hello {mentions_text}\n\n{WELCOME_TEXT}"
+    sent = await _send_welcome_message(message, welcome_text, keyboard, settings.welcome_image_path)
+    logger.info("welcome_message_sent chat_id=%s message_id=%s human_count=%s", message.chat_id, sent.message_id, len(human_members))
+    if context.job_queue:
+        context.job_queue.run_once(
+            delete_message_job,
+            when=WELCOME_DELETE_DELAY_SECONDS,
+            data={"chat_id": sent.chat_id, "message_id": sent.message_id},
+            name=f"welcome_delete_{sent.chat_id}_{sent.message_id}",
+        )
+    else:
+        logger.warning("welcome_delete_job_queue_unavailable chat_id=%s message_id=%s", sent.chat_id, sent.message_id)
 _BLOCKED_LIVE_INTENT_PREFIXES = ("mywin_", "free_spin_")
 _BLOCKED_LIVE_INTENTS = {"campaign_hashtag_signal", "new_user_start", "spam_or_abuse", "sensitive", "unknown"}
 
@@ -842,6 +950,7 @@ def setup_application():
     settings = get_settings()
     _get_ai_runtime(settings)
     application = ApplicationBuilder().token(settings.telegram_token).build()
+    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_members_handler))
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message_handler))
     application.add_handler(CommandHandler("approve", approve_handler))
     application.add_handler(CommandHandler("reject", reject_handler))

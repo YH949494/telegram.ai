@@ -106,6 +106,9 @@ class Settings(BaseSettings):
     community_reply_fingerprint_cooldown_sec: int = Field(600, env="COMMUNITY_REPLY_FINGERPRINT_COOLDOWN_SEC")
     community_reply_chat_cap_10m: int = Field(5, env="COMMUNITY_REPLY_CHAT_CAP_10M")
 
+    welcome_image_path: str = Field("assets/ap_welcome.jpg", env="WELCOME_IMAGE_PATH")
+    welcome_target_chat_id: Optional[int] = Field(None, env="WELCOME_TARGET_CHAT_ID")
+
     auto_reply_categories: Set[str] = Field(
         default_factory=lambda: {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
     )

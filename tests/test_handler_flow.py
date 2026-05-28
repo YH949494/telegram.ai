@@ -24,6 +24,7 @@ class DummyMessage:
         self.message_id = 1001
         self.from_user = user or DummyUser()
         self.reply_text = AsyncMock()
+        self.reply_photo = AsyncMock()
 
 
 def make_settings(**kwargs):
@@ -439,3 +440,124 @@ class HandlerFlowTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WelcomeFlowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_allowed_target_chat_sends_photo_once_and_schedules_delete(self):
+        user_one = DummyUser(user_id=1, is_bot=False, username="user_one")
+        user_two = DummyUser(user_id=3, is_bot=False, username="user_two")
+        bot_user = DummyUser(user_id=2, is_bot=True, username="bot_user")
+        sent = types.SimpleNamespace(chat_id=-1002304653063, message_id=2001)
+        message = types.SimpleNamespace(
+            chat_id=-1002304653063,
+            message_id=1001,
+            new_chat_members=[user_one, bot_user, user_two],
+            reply_photo=AsyncMock(return_value=sent),
+            reply_text=AsyncMock(),
+        )
+        job_queue = types.SimpleNamespace(run_once=unittest.mock.Mock())
+        context = types.SimpleNamespace(job_queue=job_queue)
+        settings = make_settings(welcome_target_chat_id=-1002304653063, welcome_image_path="assets/ap_welcome.jpg")
+
+        with patch("app.handlers.get_settings", return_value=settings), patch("app.handlers.Path.open", unittest.mock.mock_open(read_data=b"img")):
+            await handlers.welcome_new_members_handler(types.SimpleNamespace(message=message), context)
+
+        self.assertEqual(message.reply_photo.await_count, 1)
+        self.assertEqual(message.reply_text.await_count, 0)
+        self.assertEqual(job_queue.run_once.call_count, 1)
+
+    async def test_welcome_skipped_for_non_target_chat(self):
+        message = types.SimpleNamespace(
+            chat_id=-100999,
+            message_id=1001,
+            new_chat_members=[DummyUser(user_id=1, is_bot=False, username="user1")],
+            reply_photo=AsyncMock(),
+            reply_text=AsyncMock(),
+        )
+        settings = make_settings(welcome_target_chat_id=-1002304653063, welcome_image_path="assets/ap_welcome.jpg")
+
+        with patch("app.handlers.get_settings", return_value=settings):
+            await handlers.welcome_new_members_handler(types.SimpleNamespace(message=message), types.SimpleNamespace(job_queue=None))
+
+        self.assertEqual(message.reply_photo.await_count, 0)
+        self.assertEqual(message.reply_text.await_count, 0)
+
+    async def test_welcome_photo_failure_falls_back_to_text_and_schedules_delete(self):
+        sent = types.SimpleNamespace(chat_id=999, message_id=2001)
+        no_username_user = types.SimpleNamespace(
+            id=1,
+            is_bot=False,
+            username=None,
+            mention_html=lambda: '<a href="tg://user?id=1">NoName</a>',
+        )
+        message = types.SimpleNamespace(
+            chat_id=999,
+            message_id=1001,
+            new_chat_members=[no_username_user],
+            reply_photo=AsyncMock(side_effect=RuntimeError("photo failed")),
+            reply_text=AsyncMock(return_value=sent),
+        )
+        job_queue = types.SimpleNamespace(run_once=unittest.mock.Mock())
+        context = types.SimpleNamespace(job_queue=job_queue)
+        settings = make_settings(welcome_target_chat_id=None, welcome_image_path="assets/missing.jpg")
+
+        with patch("app.handlers.get_settings", return_value=settings):
+            await handlers.welcome_new_members_handler(types.SimpleNamespace(message=message), context)
+
+        self.assertEqual(message.reply_photo.await_count, 0)
+        self.assertEqual(message.reply_text.await_count, 1)
+        args, kwargs = message.reply_text.await_args
+        self.assertIn('tg://user?id=1', args[0])
+        self.assertEqual(kwargs.get("parse_mode"), "HTML")
+        self.assertEqual(job_queue.run_once.call_count, 1)
+
+    async def test_welcome_new_members_mentions_only_first_five_humans(self):
+        members = [DummyUser(user_id=i, is_bot=False, username=f"user{i}") for i in range(1, 8)]
+        sent = types.SimpleNamespace(chat_id=999, message_id=2001)
+        message = types.SimpleNamespace(
+            chat_id=999,
+            message_id=1001,
+            new_chat_members=members,
+            reply_photo=AsyncMock(return_value=sent),
+            reply_text=AsyncMock(),
+        )
+        job_queue = types.SimpleNamespace(run_once=unittest.mock.Mock())
+        context = types.SimpleNamespace(job_queue=job_queue)
+        settings = make_settings(welcome_target_chat_id=None, welcome_image_path="assets/ap_welcome.jpg")
+
+        with patch("app.handlers.get_settings", return_value=settings), patch("app.handlers.Path.open", unittest.mock.mock_open(read_data=b"img")):
+            await handlers.welcome_new_members_handler(types.SimpleNamespace(message=message), context)
+
+        args, kwargs = message.reply_photo.await_args
+        text = kwargs["caption"]
+        for i in range(1, 6):
+            self.assertIn(f"@user{i}", text)
+        self.assertNotIn("@user6", text)
+        self.assertNotIn("@user7", text)
+
+    async def test_welcome_reply_photo_failure_falls_back_to_text(self):
+        sent = types.SimpleNamespace(chat_id=999, message_id=2001)
+        message = types.SimpleNamespace(
+            chat_id=999,
+            message_id=1001,
+            new_chat_members=[DummyUser(user_id=1, is_bot=False, username="user1")],
+            reply_photo=AsyncMock(side_effect=RuntimeError("photo failed")),
+            reply_text=AsyncMock(return_value=sent),
+        )
+        context = types.SimpleNamespace(job_queue=types.SimpleNamespace(run_once=unittest.mock.Mock()))
+        settings = make_settings(welcome_target_chat_id=None, welcome_image_path="assets/ap_welcome.jpg")
+
+        with patch("app.handlers.get_settings", return_value=settings), patch("app.handlers.Path.open", unittest.mock.mock_open(read_data=b"img")):
+            await handlers.welcome_new_members_handler(types.SimpleNamespace(message=message), context)
+
+        self.assertEqual(message.reply_photo.await_count, 1)
+        self.assertEqual(message.reply_text.await_count, 1)
+
+    async def test_delete_message_job_ignores_delete_errors(self):
+        bot = types.SimpleNamespace(delete_message=AsyncMock(side_effect=RuntimeError("missing permission")))
+        job = types.SimpleNamespace(data={"chat_id": 999, "message_id": 123})
+        context = types.SimpleNamespace(job=job, bot=bot)
+
+        await handlers.delete_message_job(context)
+
+        self.assertEqual(bot.delete_message.await_count, 1)
