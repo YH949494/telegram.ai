@@ -39,6 +39,9 @@ class CommunityHelperLiveReplyTests(unittest.IsolatedAsyncioTestCase):
             community_reply_user_cooldown_sec=300,
             community_reply_fingerprint_cooldown_sec=600,
             community_reply_chat_cap_10m=5,
+            community_reply_min_gap_minutes=60,
+            community_reply_daily_cap=10,
+            community_reply_probability=1.0,
             enable_tagging=False,
             enable_suggestions=False,
             enable_low_risk_auto_reply=False,
@@ -90,7 +93,7 @@ class CommunityHelperLiveReplyTests(unittest.IsolatedAsyncioTestCase):
         update = types.SimpleNamespace(message=DummyMessage())
         with patch("app.handlers.get_settings", return_value=self._settings()), \
              patch("app.handlers.classify_community_message", return_value=self._decision()), \
-             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0]), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 0, 0]), \
              patch("app.handlers.log_community_intelligence_event"), \
              patch("app.handlers.log_community_helper_reply_event") as reply_log:
             await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
@@ -105,7 +108,7 @@ class CommunityHelperLiveReplyTests(unittest.IsolatedAsyncioTestCase):
         )
         with patch("app.handlers.get_settings", return_value=self._settings()), \
              patch("app.handlers.classify_community_message", return_value=decision), \
-             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0]), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 0, 0]), \
              patch("app.handlers.log_community_intelligence_event"), \
              patch("app.handlers.log_community_helper_reply_event"):
             await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
@@ -120,7 +123,7 @@ class CommunityHelperLiveReplyTests(unittest.IsolatedAsyncioTestCase):
         )
         with patch("app.handlers.get_settings", return_value=self._settings()), \
              patch("app.handlers.classify_community_message", return_value=decision), \
-             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0]), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 0, 0]), \
              patch("app.handlers.log_community_intelligence_event"), \
              patch("app.handlers.log_community_helper_reply_event"):
             await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
@@ -135,7 +138,7 @@ class CommunityHelperLiveReplyTests(unittest.IsolatedAsyncioTestCase):
         )
         with patch("app.handlers.get_settings", return_value=self._settings()), \
              patch("app.handlers.classify_community_message", return_value=decision), \
-             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0]), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 0, 0]), \
              patch("app.handlers.log_community_intelligence_event"), \
              patch("app.handlers.log_community_helper_reply_event"):
             await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
@@ -157,6 +160,81 @@ class CommunityHelperLiveReplyTests(unittest.IsolatedAsyncioTestCase):
             with patch("app.handlers.count_recent_community_helper_replies", side_effect=RuntimeError("db")):
                 await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
                 self.assertEqual(reply_log.call_args.args[0]["reply_sent"], False)
+
+    async def test_reply_blocked_by_min_gap(self):
+        update = types.SimpleNamespace(message=DummyMessage())
+        with patch("app.handlers.get_settings", return_value=self._settings()), \
+             patch("app.handlers.classify_community_message", return_value=self._decision()), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 1]), \
+             patch("app.handlers.log_community_intelligence_event"), \
+             patch("app.handlers.log_community_helper_reply_event") as reply_log, \
+             self.assertLogs("app.handlers", level="INFO") as logs:
+            await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
+        update.message.reply_text.assert_not_called()
+        self.assertEqual(reply_log.call_args.args[0]["suppress_reason"], "min_gap")
+        self.assertTrue(any("reply_skipped_min_gap" in line for line in logs.output))
+
+    async def test_reply_blocked_by_daily_cap(self):
+        update = types.SimpleNamespace(message=DummyMessage())
+        with patch("app.handlers.get_settings", return_value=self._settings(community_reply_daily_cap=10)), \
+             patch("app.handlers.classify_community_message", return_value=self._decision()), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 0, 10]), \
+             patch("app.handlers.log_community_intelligence_event"), \
+             patch("app.handlers.log_community_helper_reply_event") as reply_log, \
+             self.assertLogs("app.handlers", level="INFO") as logs:
+            await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
+        update.message.reply_text.assert_not_called()
+        self.assertEqual(reply_log.call_args.args[0]["suppress_reason"], "daily_cap")
+        self.assertTrue(any("reply_skipped_daily_cap" in line for line in logs.output))
+
+    async def test_reply_blocked_by_probability(self):
+        update = types.SimpleNamespace(message=DummyMessage())
+        with patch("app.handlers.get_settings", return_value=self._settings(community_reply_probability=0.2)), \
+             patch("app.handlers.classify_community_message", return_value=self._decision()), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 0, 0]), \
+             patch("app.handlers.random.random", return_value=0.9), \
+             patch("app.handlers.log_community_intelligence_event"), \
+             patch("app.handlers.log_community_helper_reply_event") as reply_log, \
+             self.assertLogs("app.handlers", level="INFO") as logs:
+            await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
+        update.message.reply_text.assert_not_called()
+        self.assertEqual(reply_log.call_args.args[0]["suppress_reason"], "probability")
+        self.assertTrue(any("reply_skipped_probability" in line for line in logs.output))
+
+    async def test_reaction_still_happens_when_reply_throttled(self):
+        update = types.SimpleNamespace(message=DummyMessage())
+        context = types.SimpleNamespace(bot=types.SimpleNamespace(id=42, set_message_reaction=AsyncMock()))
+        with patch("app.handlers.get_settings", return_value=self._settings(community_reactions_enabled=True)), \
+             patch("app.handlers.classify_community_message", return_value=self._decision(emoji="👀")), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 1]), \
+             patch("app.handlers.log_community_intelligence_event"), \
+             patch("app.handlers.log_community_helper_reply_event"):
+            await handlers.message_handler(update, context)
+        self.assertEqual(context.bot.set_message_reaction.await_count, 1)
+        update.message.reply_text.assert_not_called()
+
+    async def test_high_value_reply_still_respects_throttle(self):
+        update = types.SimpleNamespace(message=DummyMessage())
+        with patch("app.handlers.get_settings", return_value=self._settings()), \
+             patch("app.handlers.classify_community_message", return_value=self._decision(intent="voucher_where_to_enter")), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 1]), \
+             patch("app.handlers.log_community_intelligence_event"), \
+             patch("app.handlers.log_community_helper_reply_event") as reply_log:
+            await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
+        update.message.reply_text.assert_not_called()
+        self.assertEqual(reply_log.call_args.args[0]["suppress_reason"], "min_gap")
+
+    async def test_disabled_helper_sends_nothing(self):
+        update = types.SimpleNamespace(message=DummyMessage())
+        context = types.SimpleNamespace(bot=types.SimpleNamespace(id=42, set_message_reaction=AsyncMock()))
+        with patch("app.handlers.get_settings", return_value=self._settings(community_helper_enabled=False)), \
+             patch("app.handlers.classify_community_message") as ci_classify, \
+             patch("app.handlers.classify_message") as classify:
+            await handlers.message_handler(update, context)
+        ci_classify.assert_not_called()
+        classify.assert_not_called()
+        context.bot.set_message_reaction.assert_not_called()
+        update.message.reply_text.assert_not_called()
 
     async def test_sensitive_admin_alert_and_blocked_intents_never_send(self):
         update = types.SimpleNamespace(message=DummyMessage())

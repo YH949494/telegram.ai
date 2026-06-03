@@ -105,6 +105,9 @@ class Settings(BaseSettings):
     community_reply_user_cooldown_sec: int = Field(300, env="COMMUNITY_REPLY_USER_COOLDOWN_SEC")
     community_reply_fingerprint_cooldown_sec: int = Field(600, env="COMMUNITY_REPLY_FINGERPRINT_COOLDOWN_SEC")
     community_reply_chat_cap_10m: int = Field(5, env="COMMUNITY_REPLY_CHAT_CAP_10M")
+    community_reply_min_gap_minutes: int = Field(60, env="COMMUNITY_REPLY_MIN_GAP_MINUTES")
+    community_reply_daily_cap: int = Field(10, env="COMMUNITY_REPLY_DAILY_CAP")
+    community_reply_probability: float = Field(0.2, env="COMMUNITY_REPLY_PROBABILITY")
 
     welcome_image_path: str = Field("assets/ap_welcome.jpg", env="WELCOME_IMAGE_PATH")
     welcome_target_chat_id: Optional[int] = Field(None, env="WELCOME_TARGET_CHAT_ID")
@@ -135,6 +138,8 @@ class Settings(BaseSettings):
         "auto_reply_user_cooldown_seconds",
         "auto_reply_duplicate_window_seconds",
         "comeback_reaction_cooldown_seconds",
+        "community_reply_min_gap_minutes",
+        "community_reply_daily_cap",
     )
     def cooldown_must_be_non_negative(cls, value: int, field):
         if value < 0:
@@ -162,6 +167,12 @@ class Settings(BaseSettings):
             for intent in (self.community_live_allowed_intents_raw or "").split(",")
             if intent.strip()
         }
+
+    @validator("community_reply_probability")
+    def community_reply_probability_in_range(cls, value: float):
+        if value < 0.0 or value > 1.0:
+            raise ValueError("community_reply_probability must be between 0 and 1")
+        return value
 
     @validator("ai_decision_confidence_threshold")
     def ai_threshold_in_range(cls, value: float):

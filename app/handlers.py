@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+import random
 import re
 from types import SimpleNamespace
 from datetime import timedelta
@@ -204,6 +205,19 @@ def _prepare_reply_payload(payload, allow_button: bool = False):
     return payload or "", None
 
 
+def _setting_number(settings, name: str, default, *, minimum=None, maximum=None):
+    value = getattr(settings, name, default)
+    try:
+        value = type(default)(value)
+    except (TypeError, ValueError):
+        value = default
+    if minimum is not None and value < minimum:
+        value = minimum
+    if maximum is not None and value > maximum:
+        value = maximum
+    return value
+
+
 async def safe_add_reaction(
     *,
     bot,
@@ -387,7 +401,22 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     ci_decision.action,
                     ci_decision.sensitive,
                 )
-            elif settings.community_faq_reply_enabled:
+            else:
+                if (
+                    getattr(settings, "community_reactions_enabled", False)
+                    and ci_decision.emoji
+                    and not ci_decision.sensitive
+                    and not ci_decision.admin_alert
+                ):
+                    await safe_add_reaction(
+                        bot=context.bot,
+                        chat_id=message.chat_id,
+                        message_id=message.message_id,
+                        emoji=ci_decision.emoji,
+                        flow="community_helper",
+                    )
+
+            if not settings.community_helper_log_only and settings.community_faq_reply_enabled:
                 now = normalize_utc_datetime(getattr(message, "date", None)) or utc_now()
                 intent = ci_decision.intent or ""
                 can_send = (
@@ -433,10 +462,61 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         ) >= settings.community_reply_chat_cap_10m:
                             can_send = False
                             suppress_reason = "chat_cap"
+                        elif count_recent_community_helper_replies(
+                            since=now - timedelta(
+                                minutes=_setting_number(settings, "community_reply_min_gap_minutes", 60, minimum=0)
+                            ),
+                            chat_id=message.chat_id,
+                        ) > 0:
+                            can_send = False
+                            suppress_reason = "min_gap"
+                            logger.info(
+                                "reply_skipped_min_gap chat_id=%s message_id=%s intent=%s min_gap_minutes=%s",
+                                message.chat_id,
+                                message.message_id,
+                                intent,
+                                _setting_number(settings, "community_reply_min_gap_minutes", 60, minimum=0),
+                            )
+                        elif count_recent_community_helper_replies(
+                            since=now - timedelta(days=1),
+                            chat_id=message.chat_id,
+                        ) >= _setting_number(settings, "community_reply_daily_cap", 10, minimum=0):
+                            can_send = False
+                            suppress_reason = "daily_cap"
+                            logger.info(
+                                "reply_skipped_daily_cap chat_id=%s message_id=%s intent=%s daily_cap=%s",
+                                message.chat_id,
+                                message.message_id,
+                                intent,
+                                _setting_number(settings, "community_reply_daily_cap", 10, minimum=0),
+                            )
                     except Exception:
                         can_send = False
                         suppress_reason = "disabled"
                         logger.warning("community_helper_live_db_check_failed message_id=%s", message.message_id, exc_info=True)
+
+                if can_send:
+                    reply_probability = _setting_number(
+                        settings, "community_reply_probability", 0.2, minimum=0.0, maximum=1.0
+                    )
+                    if random.random() >= reply_probability:
+                        can_send = False
+                        suppress_reason = "probability"
+                        logger.info(
+                            "reply_skipped_probability chat_id=%s message_id=%s intent=%s probability=%s",
+                            message.chat_id,
+                            message.message_id,
+                            intent,
+                            reply_probability,
+                        )
+                    else:
+                        logger.info(
+                            "reply_allowed chat_id=%s message_id=%s intent=%s probability=%s",
+                            message.chat_id,
+                            message.message_id,
+                            intent,
+                            reply_probability,
+                        )
 
                 reply_sent = False
                 button_count = len(ci_decision.buttons or [])
