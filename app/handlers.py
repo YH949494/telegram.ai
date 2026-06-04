@@ -65,6 +65,9 @@ RECOMMENDATION_PATTERNS = [r"\brecommend(?:ed|ation)?\b", r"max\s*win", r"this\s
 RESULT_PATTERNS = [r"\bi\s+won\b", r"\bmy\s+win\b", r"\bcashed?\s*out\b", r"\bjackpot\b", r"\bwon\s+\d+(?:\.\d+)?x?\b", r"中奖", r"赢了"]
 SUPPORT_PATTERNS = [r"\bvoucher\b", r"\bpromo\b", r"\bissue\b", r"\berror\b", r"\bcan't\b", r"无法", r"失败"]
 NEW_USER_PATTERNS = [r"\bi'?m\s+new\b", r"\bi\s+am\s+new\b", r"\bjust\s+joined\b", r"\bnew\s+(?:here|member)\b", r"新人", r"新来的?", r"刚加入"]
+CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
+ADMIN_MEMBER_STATUSES = {"administrator", "creator", "owner"}
+GROUP_CHAT_TYPES = {"group", "supergroup"}
 
 
 WELCOME_TEXT = (
@@ -306,6 +309,92 @@ def has_mixed_intent(text: str) -> bool:
     return bool(_detect_text_features(text)["mixed_signal"])
 
 
+def contains_cyrillic(text: str) -> bool:
+    return bool(text and CYRILLIC_RE.search(text))
+
+
+def _message_text_and_caption(message) -> str:
+    parts = []
+    for field in ("text", "caption"):
+        value = getattr(message, field, None)
+        if value:
+            parts.append(str(value))
+    return " ".join(parts)
+
+
+def _is_group_or_supergroup_message(message) -> bool:
+    chat = getattr(message, "chat", None)
+    chat_type = getattr(chat, "type", None) or getattr(message, "chat_type", None)
+    return chat_type in GROUP_CHAT_TYPES
+
+
+async def _sender_is_admin_or_owner(message, context) -> bool:
+    user = getattr(message, "from_user", None)
+    bot = getattr(context, "bot", None)
+    if not user or not bot or not hasattr(bot, "get_chat_member"):
+        return False
+    try:
+        member = await bot.get_chat_member(chat_id=message.chat_id, user_id=user.id)
+    except Exception:
+        logger.warning(
+            "[MODERATION_ADMIN_CHECK_FAILED] reason=cyrillic_language user_id=%s chat_id=%s message_id=%s",
+            user.id,
+            message.chat_id,
+            message.message_id,
+            exc_info=True,
+        )
+        return True
+    return getattr(member, "status", None) in ADMIN_MEMBER_STATUSES
+
+
+async def _delete_cyrillic_message_if_needed(message, context) -> bool:
+    text = _message_text_and_caption(message)
+    if not contains_cyrillic(text) or not _is_group_or_supergroup_message(message):
+        return False
+
+    user = getattr(message, "from_user", None)
+    user_id = getattr(user, "id", None)
+    if await _sender_is_admin_or_owner(message, context):
+        logger.debug(
+            "[MODERATION_SKIP] reason=cyrillic_language_admin user_id=%s chat_id=%s message_id=%s",
+            user_id,
+            message.chat_id,
+            message.message_id,
+        )
+        return False
+
+    try:
+        await context.bot.delete_message(chat_id=message.chat_id, message_id=message.message_id)
+    except Exception as exc:
+        logger.warning(
+            "[MODERATION_DELETE_FAILED] reason=cyrillic_language error=%s user_id=%s chat_id=%s message_id=%s",
+            exc,
+            user_id,
+            message.chat_id,
+            message.message_id,
+        )
+        return True
+
+    logger.info(
+        "[MODERATION_DELETE] reason=cyrillic_language user_id=%s chat_id=%s message_id=%s",
+        user_id,
+        message.chat_id,
+        message.message_id,
+    )
+    return True
+
+
+async def cyrillic_caption_moderation_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message
+    if message is None:
+        return
+    if message.from_user and message.from_user.is_bot:
+        return
+    if context.bot and message.from_user and context.bot.id == message.from_user.id:
+        return
+    await _delete_cyrillic_message_if_needed(message, context)
+
+
 def should_run_ai_decision(*, settings, text: str, rule_category: str, rule_confidence: float) -> bool:
     if not settings.enable_ai_decision or not settings.openai_api_key:
         return False
@@ -336,12 +425,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     message = update.message
     if message is None:
         return
-    text = getattr(message, "text", None) or getattr(message, "caption", None)
+    text = _message_text_and_caption(message)
     if not text:
         return
     if message.from_user and message.from_user.is_bot:
         return
     if context.bot and message.from_user and context.bot.id == message.from_user.id:
+        return
+    if await _delete_cyrillic_message_if_needed(message, context):
         return
 
     settings = get_settings()
@@ -1031,6 +1122,7 @@ def setup_application():
     _get_ai_runtime(settings)
     application = ApplicationBuilder().token(settings.telegram_token).build()
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_members_handler))
+    application.add_handler(MessageHandler(filters.CAPTION, cyrillic_caption_moderation_handler))
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message_handler))
     application.add_handler(CommandHandler("approve", approve_handler))
     application.add_handler(CommandHandler("reject", reject_handler))

@@ -18,9 +18,11 @@ class DummyUser:
 
 
 class DummyMessage:
-    def __init__(self, text, user=None):
+    def __init__(self, text=None, user=None, caption=None, chat_type="group"):
         self.text = text
+        self.caption = caption
         self.chat_id = 999
+        self.chat = types.SimpleNamespace(type=chat_type) if chat_type else None
         self.message_id = 1001
         self.from_user = user or DummyUser()
         self.reply_text = AsyncMock()
@@ -55,6 +57,7 @@ def make_settings(**kwargs):
         ai_max_seed_reuse_per_window=1,
         ai_generation_rewrite_mode=True,
         enable_seed_rotation_memory=True,
+        community_helper_enabled=False,
         admin_chat_id=None,
     )
     payload.update(kwargs)
@@ -62,6 +65,117 @@ def make_settings(**kwargs):
 
 
 class HandlerFlowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_contains_cyrillic_detects_unicode_range(self):
+        self.assertTrue(handlers.contains_cyrillic("hello Привет"))
+        self.assertFalse(handlers.contains_cyrillic("hello world"))
+
+    async def test_non_admin_russian_text_is_deleted(self):
+        update = types.SimpleNamespace(message=DummyMessage("Привет бонус"))
+        bot = types.SimpleNamespace(
+            id=42,
+            delete_message=AsyncMock(),
+            get_chat_member=AsyncMock(return_value=types.SimpleNamespace(status="member")),
+        )
+        context = types.SimpleNamespace(bot=bot)
+
+        with self.assertLogs("app.handlers", level="INFO") as logs:
+            await handlers.message_handler(update, context)
+
+        bot.delete_message.assert_awaited_once_with(chat_id=999, message_id=1001)
+        self.assertIn(
+            "[MODERATION_DELETE] reason=cyrillic_language user_id=123 chat_id=999 message_id=1001",
+            "\n".join(logs.output),
+        )
+
+    async def test_non_admin_mixed_english_cyrillic_is_deleted(self):
+        update = types.SimpleNamespace(message=DummyMessage("bonus Привет"))
+        bot = types.SimpleNamespace(
+            id=42,
+            delete_message=AsyncMock(),
+            get_chat_member=AsyncMock(return_value=types.SimpleNamespace(status="member")),
+        )
+        context = types.SimpleNamespace(bot=bot)
+
+        await handlers.message_handler(update, context)
+
+        bot.delete_message.assert_awaited_once_with(chat_id=999, message_id=1001)
+
+    async def test_admin_cyrillic_message_is_not_deleted(self):
+        update = types.SimpleNamespace(message=DummyMessage("Привет админ"))
+        bot = types.SimpleNamespace(
+            id=42,
+            delete_message=AsyncMock(),
+            get_chat_member=AsyncMock(return_value=types.SimpleNamespace(status="administrator")),
+        )
+        context = types.SimpleNamespace(bot=bot)
+
+        decision = types.SimpleNamespace(category="unknown", action="ignore", confidence=0.2, suggested_reply="", reason="rule")
+        settings = make_settings(enable_ai_decision=False)
+
+        with patch("app.handlers.get_settings", return_value=settings), patch("app.handlers.classify_message", return_value=decision), patch("app.handlers.log_message"):
+            await handlers.message_handler(update, context)
+
+        self.assertEqual(bot.delete_message.await_count, 0)
+
+    async def test_private_chat_cyrillic_message_is_not_deleted(self):
+        update = types.SimpleNamespace(message=DummyMessage("Привет", chat_type="private"))
+        bot = types.SimpleNamespace(
+            id=42,
+            delete_message=AsyncMock(),
+            get_chat_member=AsyncMock(return_value=types.SimpleNamespace(status="member")),
+        )
+        context = types.SimpleNamespace(bot=bot, send_message=AsyncMock())
+        decision = types.SimpleNamespace(category="unknown", action="ignore", confidence=0.2, suggested_reply="", reason="rule")
+        settings = make_settings(enable_ai_decision=False)
+
+        with patch("app.handlers.get_settings", return_value=settings), patch("app.handlers.classify_message", return_value=decision), patch("app.handlers.log_message"):
+            await handlers.message_handler(update, context)
+
+        self.assertEqual(bot.delete_message.await_count, 0)
+
+    async def test_normal_english_message_is_not_deleted(self):
+        update = types.SimpleNamespace(message=DummyMessage("hello bonus"))
+        bot = types.SimpleNamespace(
+            id=42,
+            delete_message=AsyncMock(),
+            get_chat_member=AsyncMock(return_value=types.SimpleNamespace(status="member")),
+        )
+        context = types.SimpleNamespace(bot=bot, send_message=AsyncMock(), set_message_reaction=AsyncMock())
+        decision = types.SimpleNamespace(category="unknown", action="ignore", confidence=0.2, suggested_reply="", reason="rule")
+        settings = make_settings(enable_ai_decision=False)
+
+        with patch("app.handlers.get_settings", return_value=settings), patch("app.handlers.classify_message", return_value=decision), patch("app.handlers.log_message"):
+            await handlers.message_handler(update, context)
+
+        self.assertEqual(bot.delete_message.await_count, 0)
+
+    async def test_cyrillic_caption_is_deleted_by_caption_moderation_handler(self):
+        update = types.SimpleNamespace(message=DummyMessage(text=None, caption="promo Привет"))
+        bot = types.SimpleNamespace(
+            id=42,
+            delete_message=AsyncMock(),
+            get_chat_member=AsyncMock(return_value=types.SimpleNamespace(status="member")),
+        )
+        context = types.SimpleNamespace(bot=bot)
+
+        await handlers.cyrillic_caption_moderation_handler(update, context)
+
+        bot.delete_message.assert_awaited_once_with(chat_id=999, message_id=1001)
+
+    async def test_cyrillic_delete_failure_logs_warning_without_crash(self):
+        update = types.SimpleNamespace(message=DummyMessage("Привет"))
+        bot = types.SimpleNamespace(
+            id=42,
+            delete_message=AsyncMock(side_effect=RuntimeError("missing permission")),
+            get_chat_member=AsyncMock(return_value=types.SimpleNamespace(status="member")),
+        )
+        context = types.SimpleNamespace(bot=bot)
+
+        with self.assertLogs("app.handlers", level="WARNING") as logs:
+            await handlers.message_handler(update, context)
+
+        self.assertIn("[MODERATION_DELETE_FAILED] reason=cyrillic_language error=missing permission", "\n".join(logs.output))
+
     async def test_safe_add_reaction_skips_reaction_invalid(self):
         bot = types.SimpleNamespace(set_message_reaction=AsyncMock(side_effect=BadRequest("Reaction_invalid")))
 
