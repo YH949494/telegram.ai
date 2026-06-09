@@ -35,3 +35,17 @@ class SettingsEngagementChatIdsTests(unittest.TestCase):
         settings = self._build_settings("1,abc,3")
         with self.assertRaises(ValueError):
             _ = settings.engagement_target_chat_ids
+
+    def test_official_channel_cta_disabled_by_default(self):
+        settings = self._build_settings("")
+        self.assertFalse(settings.official_channel_cta_enabled)
+
+    def test_official_channel_cta_can_be_enabled(self):
+        env = {
+            "TELEGRAM_TOKEN": "token",
+            "MONGODB_URI": "mongodb://localhost:27017",
+            "OFFICIAL_CHANNEL_CTA_ENABLED": "true",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            settings = Settings()
+        self.assertTrue(settings.official_channel_cta_enabled)

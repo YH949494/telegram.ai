@@ -57,6 +57,7 @@ def make_settings(**kwargs):
         ai_max_seed_reuse_per_window=1,
         ai_generation_rewrite_mode=True,
         enable_seed_rotation_memory=True,
+        official_channel_cta_enabled=False,
         community_helper_enabled=False,
         admin_chat_id=None,
     )
@@ -191,7 +192,7 @@ class HandlerFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result)
         self.assertIn("reaction_invalid_skipped chat_id=999 message_id=1001 emoji=🔥", logs.output[0])
 
-    async def test_deterministic_new_user_still_sends(self):
+    async def test_deterministic_new_user_still_sends_without_official_channel_button(self):
         settings = make_settings(enable_ai_decision=False)
         update = types.SimpleNamespace(message=DummyMessage("hi im new"))
         context = types.SimpleNamespace(bot=types.SimpleNamespace(id=42, set_message_reaction=AsyncMock(), send_message=AsyncMock()))
@@ -204,6 +205,20 @@ class HandlerFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(update.message.reply_text.await_count, 1)
         _, kwargs = update.message.reply_text.await_args
         self.assertEqual(kwargs.get("parse_mode"), "HTML")
+        self.assertIsNone(kwargs.get("reply_markup"))
+
+    async def test_deterministic_new_user_sends_official_channel_button_when_enabled(self):
+        settings = make_settings(enable_ai_decision=False, official_channel_cta_enabled=True)
+        update = types.SimpleNamespace(message=DummyMessage("hi im new"))
+        context = types.SimpleNamespace(bot=types.SimpleNamespace(id=42, set_message_reaction=AsyncMock(), send_message=AsyncMock()))
+        decision = types.SimpleNamespace(category="new_user", action="auto_reply", confidence=0.95, suggested_reply="", reason="rule")
+        throttle_allow = types.SimpleNamespace(allowed=True, reason="none", normalized_text_hash="h")
+
+        with patch("app.handlers.get_settings", return_value=settings), patch("app.handlers.classify_message", return_value=decision), patch("app.handlers.auto_reply_throttle.evaluate_auto_reply_throttle", return_value=throttle_allow), patch("app.handlers.log_message"):
+            await handlers.message_handler(update, context)
+
+        self.assertEqual(update.message.reply_text.await_count, 1)
+        _, kwargs = update.message.reply_text.await_args
         self.assertIsNotNone(kwargs.get("reply_markup"))
 
     async def test_deterministic_support_behaves(self):
