@@ -82,6 +82,7 @@ WELCOME_TEXT = (
 WELCOME_BUTTON_TEXT = "Claim Your $1"
 WELCOME_BUTTON_URL = "https://t.me/APreferralV1_bot?start=start"
 WELCOME_DELETE_DELAY_SECONDS = 180
+OFFICIAL_CHANNEL_URLS = {"https://t.me/advantplayofficial", "http://t.me/advantplayofficial", "t.me/advantplayofficial"}
 
 
 
@@ -193,14 +194,24 @@ def _community_button_text_url(btn):
     return text, url
 
 
-def _prepare_reply_payload(payload, allow_button: bool = False):
+def _is_official_channel_button(text: str | None, url: str | None) -> bool:
+    normalized_url = (url or "").strip().rstrip("/").lower()
+    normalized_text = (text or "").strip().lower()
+    return normalized_url in OFFICIAL_CHANNEL_URLS or (
+        "official channel" in normalized_text and "advantplayofficial" in normalized_url
+    )
+
+
+def _prepare_reply_payload(payload, allow_button: bool = False, official_channel_cta_enabled: bool = False):
     if isinstance(payload, dict):
         reply_text = payload.get("text") or ""
         reply_markup = None
         if allow_button:
             button_text = payload.get("button_text")
             button_url = payload.get("button_url")
-            if button_text and button_url:
+            if button_text and button_url and (
+                official_channel_cta_enabled or not _is_official_channel_button(button_text, button_url)
+            ):
                 reply_markup = InlineKeyboardMarkup(
                     [[InlineKeyboardButton(text=button_text, url=button_url)]]
                 )
@@ -618,7 +629,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                             rows = []
                             for btn in ci_decision.buttons:
                                 btn_text, btn_url = _community_button_text_url(btn)
-                                if btn_text and btn_url:
+                                if btn_text and btn_url and (
+                                    getattr(settings, "official_channel_cta_enabled", False)
+                                    or not _is_official_channel_button(btn_text, btn_url)
+                                ):
                                     rows.append([InlineKeyboardButton(text=btn_text, url=btn_url)])
                             if rows:
                                 reply_markup = InlineKeyboardMarkup(rows)
@@ -932,6 +946,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             reply_text, reply_markup = _prepare_reply_payload(
                 reply_payload,
                 allow_button=allow_button,
+                official_channel_cta_enabled=getattr(settings, "official_channel_cta_enabled", False),
             )
             if reply_text:
                 logger.info("Auto reply triggered for message_id=%s category=%s", message.message_id, category)

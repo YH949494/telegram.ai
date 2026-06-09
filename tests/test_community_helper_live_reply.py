@@ -42,6 +42,7 @@ class CommunityHelperLiveReplyTests(unittest.IsolatedAsyncioTestCase):
             community_reply_min_gap_minutes=60,
             community_reply_daily_cap=10,
             community_reply_probability=1.0,
+            official_channel_cta_enabled=False,
             enable_tagging=False,
             enable_suggestions=False,
             enable_low_risk_auto_reply=False,
@@ -122,6 +123,44 @@ class CommunityHelperLiveReplyTests(unittest.IsolatedAsyncioTestCase):
             buttons=[{"text": "Open app", "url": "https://example.com"}],
         )
         with patch("app.handlers.get_settings", return_value=self._settings()), \
+             patch("app.handlers.classify_community_message", return_value=decision), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 0, 0]), \
+             patch("app.handlers.log_community_intelligence_event"), \
+             patch("app.handlers.log_community_helper_reply_event"):
+            await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
+        kwargs = update.message.reply_text.call_args.kwargs
+        self.assertIsNotNone(kwargs.get("reply_markup"))
+
+    async def test_official_channel_button_is_not_sent(self):
+        update = types.SimpleNamespace(message=DummyMessage())
+        decision = self._decision(
+            intent="official_channel_follow_how",
+            category="channel",
+            reply="Follow the official channel to get announcements and voucher drops.",
+            buttons=[CommunityButton(text="Official Channel", url="https://t.me/advantplayofficial")],
+        )
+        with patch("app.handlers.get_settings", return_value=self._settings(community_live_allowed_intents={"official_channel_follow_how"})), \
+             patch("app.handlers.classify_community_message", return_value=decision), \
+             patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 0, 0]), \
+             patch("app.handlers.log_community_intelligence_event"), \
+             patch("app.handlers.log_community_helper_reply_event"):
+            await handlers.message_handler(update, types.SimpleNamespace(bot=types.SimpleNamespace(id=42)))
+        kwargs = update.message.reply_text.call_args.kwargs
+        self.assertIsNone(kwargs.get("reply_markup"))
+
+    async def test_official_channel_button_is_sent_when_enabled(self):
+        update = types.SimpleNamespace(message=DummyMessage())
+        decision = self._decision(
+            intent="official_channel_follow_how",
+            category="channel",
+            reply="Follow the official channel to get announcements and voucher drops.",
+            buttons=[CommunityButton(text="Official Channel", url="https://t.me/advantplayofficial")],
+        )
+        settings = self._settings(
+            community_live_allowed_intents={"official_channel_follow_how"},
+            official_channel_cta_enabled=True,
+        )
+        with patch("app.handlers.get_settings", return_value=settings), \
              patch("app.handlers.classify_community_message", return_value=decision), \
              patch("app.handlers.count_recent_community_helper_replies", side_effect=[0, 0, 0, 0, 0]), \
              patch("app.handlers.log_community_intelligence_event"), \
