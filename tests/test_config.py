@@ -49,3 +49,30 @@ class SettingsEngagementChatIdsTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             settings = Settings()
         self.assertTrue(settings.official_channel_cta_enabled)
+
+    def test_anti_inline_spam_defaults_are_safe(self):
+        settings = self._build_settings("")
+        self.assertFalse(settings.anti_inline_spam_enabled)
+        self.assertTrue(settings.anti_inline_spam_dry_run)
+        self.assertTrue(settings.anti_inline_spam_delete)
+        self.assertTrue(settings.anti_inline_spam_ban)
+        self.assertEqual(settings.anti_inline_spam_allowed_bot_usernames, {"rose", "combot"})
+        self.assertEqual(settings.anti_inline_spam_allowed_domains, {"t.me", "telegram.me"})
+
+    def test_anti_inline_spam_allowlists_parse(self):
+        env = {
+            "TELEGRAM_TOKEN": "token",
+            "MONGODB_URI": "mongodb://localhost:27017",
+            "ANTI_INLINE_SPAM_GROUP_IDS": "-1001, -1002",
+            "ANTI_INLINE_SPAM_ALLOWED_USER_IDS": "1, 2",
+            "ANTI_INLINE_SPAM_ALLOWED_USERNAMES": "@Alice, Bob",
+            "ANTI_INLINE_SPAM_ALLOWED_BOT_USERNAMES": "@Rose, Combot",
+            "ANTI_INLINE_SPAM_ALLOWED_DOMAINS": "t.me, Example.com",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            settings = Settings()
+        self.assertEqual(settings.anti_inline_spam_group_ids, {-1001, -1002})
+        self.assertEqual(settings.anti_inline_spam_allowed_user_ids, {1, 2})
+        self.assertEqual(settings.anti_inline_spam_allowed_usernames, {"alice", "bob"})
+        self.assertEqual(settings.anti_inline_spam_allowed_bot_usernames, {"rose", "combot"})
+        self.assertEqual(settings.anti_inline_spam_allowed_domains, {"t.me", "example.com"})
