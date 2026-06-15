@@ -112,6 +112,16 @@ class Settings(BaseSettings):
     welcome_image_path: str = Field("assets/ap_welcome.jpg", env="WELCOME_IMAGE_PATH")
     welcome_target_chat_id: Optional[int] = Field(None, env="WELCOME_TARGET_CHAT_ID")
     official_channel_cta_enabled: bool = Field(False, env="OFFICIAL_CHANNEL_CTA_ENABLED")
+    anti_inline_spam_enabled: bool = Field(False, env="ANTI_INLINE_SPAM_ENABLED")
+    anti_inline_spam_dry_run: bool = Field(True, env="ANTI_INLINE_SPAM_DRY_RUN")
+    anti_inline_spam_delete: bool = Field(True, env="ANTI_INLINE_SPAM_DELETE")
+    anti_inline_spam_ban: bool = Field(True, env="ANTI_INLINE_SPAM_BAN")
+    anti_inline_spam_group_ids_raw: str = Field("", env="ANTI_INLINE_SPAM_GROUP_IDS")
+    anti_inline_spam_allowed_user_ids_raw: str = Field("", env="ANTI_INLINE_SPAM_ALLOWED_USER_IDS")
+    anti_inline_spam_allowed_usernames_raw: str = Field("", env="ANTI_INLINE_SPAM_ALLOWED_USERNAMES")
+    anti_inline_spam_allowed_bot_usernames_raw: str = Field("Rose,Combot", env="ANTI_INLINE_SPAM_ALLOWED_BOT_USERNAMES")
+    anti_inline_spam_allowed_domains_raw: str = Field("t.me,telegram.me", env="ANTI_INLINE_SPAM_ALLOWED_DOMAINS")
+    anti_inline_spam_admin_alert_chat_id: Optional[int] = Field(None, env="ANTI_INLINE_SPAM_ADMIN_ALERT_CHAT_ID")
 
     auto_reply_categories: Set[str] = Field(
         default_factory=lambda: {"comeback_campaign", "new_user", "win_share", "positive_signal", "voucher_subscription"}
@@ -168,6 +178,47 @@ class Settings(BaseSettings):
             for intent in (self.community_live_allowed_intents_raw or "").split(",")
             if intent.strip()
         }
+
+    @staticmethod
+    def _parse_int_set(raw: str) -> Set[int]:
+        out: Set[int] = set()
+        for part in (raw or "").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            out.add(int(part))
+        return out
+
+    @staticmethod
+    def _parse_lower_set(raw: str, *, strip_at: bool = False) -> Set[str]:
+        out: Set[str] = set()
+        for part in (raw or "").split(","):
+            part = part.strip().lower()
+            if strip_at:
+                part = part.lstrip("@")
+            if part:
+                out.add(part)
+        return out
+
+    @property
+    def anti_inline_spam_group_ids(self) -> Set[int]:
+        return self._parse_int_set(self.anti_inline_spam_group_ids_raw)
+
+    @property
+    def anti_inline_spam_allowed_user_ids(self) -> Set[int]:
+        return self._parse_int_set(self.anti_inline_spam_allowed_user_ids_raw)
+
+    @property
+    def anti_inline_spam_allowed_usernames(self) -> Set[str]:
+        return self._parse_lower_set(self.anti_inline_spam_allowed_usernames_raw, strip_at=True)
+
+    @property
+    def anti_inline_spam_allowed_bot_usernames(self) -> Set[str]:
+        return self._parse_lower_set(self.anti_inline_spam_allowed_bot_usernames_raw, strip_at=True)
+
+    @property
+    def anti_inline_spam_allowed_domains(self) -> Set[str]:
+        return self._parse_lower_set(self.anti_inline_spam_allowed_domains_raw)
 
     @validator("community_reply_probability")
     def community_reply_probability_in_range(cls, value: float):
