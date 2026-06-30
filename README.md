@@ -85,6 +85,7 @@ GitHub secrets:
 | `ENABLE_LOW_RISK_AUTO_REPLY` | Enable low-risk auto replies (default: `true`). |
 | `ENABLE_THREADED_REPLIES` | Reply using Telegram threading (default: `true`). |
 | `ENABLE_AUTO_REPLY_THROTTLE` | Enable auto-reply anti-spam throttle (default: `true`). |
+| `THAI_LANGUAGE_DELETE_ENABLED` | Delete group/supergroup messages containing Thai script in text or captions (default: `true`). |
 | `AUTO_REPLY_NEW_USER_COOLDOWN_SECONDS` | Cooldown for `new_user` auto-replies per group (default: `120`). |
 | `AUTO_REPLY_POSITIVE_SIGNAL_COOLDOWN_SECONDS` | Cooldown for `positive_signal` auto-replies per group (default: `45`). |
 | `AUTO_REPLY_WIN_SHARE_COOLDOWN_SECONDS` | Cooldown for `win_share` auto-replies per group (default: `30`). |
