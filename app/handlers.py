@@ -7,7 +7,7 @@ from datetime import timedelta
 from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji, Update
-from telegram.error import BadRequest
+from telegram.error import BadRequest, Forbidden, TelegramError
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 try:
@@ -66,6 +66,7 @@ RESULT_PATTERNS = [r"\bi\s+won\b", r"\bmy\s+win\b", r"\bcashed?\s*out\b", r"\bja
 SUPPORT_PATTERNS = [r"\bvoucher\b", r"\bpromo\b", r"\bissue\b", r"\berror\b", r"\bcan't\b", r"无法", r"失败"]
 NEW_USER_PATTERNS = [r"\bi'?m\s+new\b", r"\bi\s+am\s+new\b", r"\bjust\s+joined\b", r"\bnew\s+(?:here|member)\b", r"新人", r"新来的?", r"刚加入"]
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
+THAI_RE = re.compile(r"[\u0E00-\u0E7F]")
 ADMIN_MEMBER_STATUSES = {"administrator", "creator", "owner"}
 GROUP_CHAT_TYPES = {"group", "supergroup"}
 
@@ -324,6 +325,10 @@ def contains_cyrillic(text: str) -> bool:
     return bool(text and CYRILLIC_RE.search(text))
 
 
+def contains_thai(text: str) -> bool:
+    return bool(text and THAI_RE.search(text))
+
+
 def _message_text_and_caption(message) -> str:
     parts = []
     for field in ("text", "caption"):
@@ -395,6 +400,42 @@ async def _delete_cyrillic_message_if_needed(message, context) -> bool:
     return True
 
 
+async def _delete_thai_language_message_if_needed(message, context) -> bool:
+    settings = get_settings()
+    if not getattr(settings, "thai_language_delete_enabled", True):
+        return False
+    if not _is_group_or_supergroup_message(message):
+        return False
+
+    text = _message_text_and_caption(message)
+    if not contains_thai(text):
+        return False
+
+    user = getattr(message, "from_user", None)
+    user_id = getattr(user, "id", None)
+    try:
+        await context.bot.delete_message(chat_id=message.chat_id, message_id=message.message_id)
+    except (BadRequest, Forbidden, TelegramError):
+        logger.warning(
+            "[MODERATION_DELETE_FAILED] chat_id=%s user_id=%s message_id=%s reason=%s",
+            message.chat_id,
+            user_id,
+            message.message_id,
+            "thai_language_detected",
+            exc_info=True,
+        )
+        return True
+
+    logger.info(
+        "[MODERATION_DELETE] chat_id=%s user_id=%s message_id=%s reason=%s",
+        message.chat_id,
+        user_id,
+        message.message_id,
+        "thai_language_detected",
+    )
+    return True
+
+
 async def cyrillic_caption_moderation_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
     if message is None:
@@ -402,6 +443,8 @@ async def cyrillic_caption_moderation_handler(update: Update, context: ContextTy
     if message.from_user and message.from_user.is_bot:
         return
     if context.bot and message.from_user and context.bot.id == message.from_user.id:
+        return
+    if await _delete_thai_language_message_if_needed(message, context):
         return
     await _delete_cyrillic_message_if_needed(message, context)
 
@@ -442,6 +485,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if message.from_user and message.from_user.is_bot:
         return
     if context.bot and message.from_user and context.bot.id == message.from_user.id:
+        return
+    if await _delete_thai_language_message_if_needed(message, context):
         return
     if await _delete_cyrillic_message_if_needed(message, context):
         return
