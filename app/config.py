@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     enable_low_risk_auto_reply: bool = Field(True, env="ENABLE_LOW_RISK_AUTO_REPLY")
     enable_threaded_replies: bool = Field(True, env="ENABLE_THREADED_REPLIES")
     enable_auto_reply_throttle: bool = Field(True, env="ENABLE_AUTO_REPLY_THROTTLE")
+    thai_language_delete_enabled: bool = Field(True, env="THAI_LANGUAGE_DELETE_ENABLED")
 
     openai_api_key: Optional[str] = Field(None, env="OPENAI_API_KEY")
     openai_decision_model: str = Field("gpt-4.1-mini", env="OPENAI_DECISION_MODEL")
