@@ -12,10 +12,16 @@ Category = Literal[
     "voucher_question",
     "support_issue",
     "win_share",
+    "loss_share",
+    "deposit_question",
+    "withdrawal_question",
+    "bonus_inquiry",
+    "game_question",
     "game_recommendation",
     "positive_signal",
     "negative_sentiment",
     "affiliate_interest",
+    "high_intent",
     "general_question",
     "ignore",
     "unknown",
@@ -59,10 +65,16 @@ DECISION_JSON_SCHEMA = {
                 "voucher_question",
                 "support_issue",
                 "win_share",
+                "loss_share",
+                "deposit_question",
+                "withdrawal_question",
+                "bonus_inquiry",
+                "game_question",
                 "game_recommendation",
                 "positive_signal",
                 "negative_sentiment",
                 "affiliate_interest",
+                "high_intent",
                 "general_question",
                 "ignore",
                 "unknown",
@@ -108,8 +120,8 @@ DECISION_JSON_SCHEMA = {
 
 DECISION_INSTRUCTIONS_BASE = (
     "You are classifying messages in a Telegram community group for AdvantPlay, an online gaming platform. "
-    "Members use this group to: share wins, ask about vouchers/promo codes, report technical issues, "
-    "express positive/negative sentiment, and engage with the community. "
+    "Members use this group to: share wins/losses, ask about vouchers/promo codes, report technical issues, "
+    "ask about deposits/withdrawals/bonuses/games, express sentiment, and engage with the community. "
     "The group is multilingual — members write in English and Chinese. "
     "The bot's job is to engage meaningfully without being noisy or spammy. "
     "Unnecessary replies are harmful. Prefer precision over recall and default to silence.\n\n"
@@ -118,13 +130,25 @@ DECISION_INSTRUCTIONS_BASE = (
     "  YES: 'I won RM500!', 'just hit jackpot', 'cashed out today', '赢了'. "
     "  NO: 'max win is 100x', 'daily recommendation', 'this game has high rtp', '推荐'. "
     "  Key: personal first-person result, not game stats or recommendations.\n"
+    "- loss_share: User sharing that they lost or had bad luck in a game. "
+    "  YES: 'I lost so much today', 'bad luck streak', 'keep losing', '输了', '亏了'. "
+    "  NO: complaints about the platform or accusations of scam (those are negative_sentiment).\n"
     "- new_user: User explicitly identifying themselves as new to the group. "
     "  YES: 'just joined', 'im new here', '新人', '刚加入'. "
     "  NO: messages that merely mention 'new' in another context (e.g. 'new voucher', 'new game').\n"
     "- voucher_question: User asking about or having trouble with a specific voucher/promo code.\n"
-    "- support_issue: User reporting a technical problem — login failure, payment error, withdrawal stuck.\n"
+    "- deposit_question: User asking how to deposit, about payment methods, top-up options, or minimum deposit. "
+    "  YES: 'how to deposit', 'what payment methods', 'how do I top up', '如何充值', '充值方式'.\n"
+    "- withdrawal_question: User asking about withdrawals — how to withdraw, withdrawal status, processing time, or withdrawal failures. "
+    "  YES: 'how to withdraw', 'my withdrawal is pending', 'when will I receive my money', '怎么提款', '提现失败'.\n"
+    "- bonus_inquiry: User asking about bonuses, cashback, reload promotions, loyalty points, or free credits. "
+    "  YES: 'is there a welcome bonus', 'how to claim cashback', 'any reload bonus', '返水', '红利'.\n"
+    "- game_question: User asking about what games are available, how to play a specific game, or game recommendations. "
+    "  YES: 'what games do you have', 'how to play slots', 'recommend a game', '怎么玩', '推荐游戏'.\n"
+    "- support_issue: User reporting a technical problem — login failure, payment error, withdrawal stuck, account locked.\n"
     "- positive_signal: User expressing genuine appreciation or satisfaction (not just noise).\n"
-    "- negative_sentiment: User expressing frustration, complaint, or reporting a loss.\n"
+    "- negative_sentiment: User expressing frustration, complaint, or accusing the platform of wrongdoing.\n"
+    "- high_intent: User expressing strong interest in affiliate programs, referrals, or earning more rewards.\n"
     "- ignore: Spam, off-topic chat, bot commands, or low-value noise.\n"
     "Output only schema-compliant JSON."
 )

@@ -40,6 +40,23 @@ RESPONSES = {
         "button_text": "Join Official Channel",
         "button_url": "https://t.me/advantplayofficial"
     },
+    "deposit_question": (
+        "It looks like you have a question about deposits or payment methods. "
+        "An admin will assist you shortly."
+    ),
+    "withdrawal_question": (
+        "Thanks for reaching out about your withdrawal. "
+        "Our team will look into it and get back to you as soon as possible."
+    ),
+    "bonus_inquiry": (
+        "Thanks for your interest in our promotions and bonuses! "
+        "An admin will share the latest details with you shortly."
+    ),
+    "game_question": (
+        "Looks like you have a question about our games. "
+        "Our team will help answer that for you shortly."
+    ),
+    "loss_share": "Hang in there — better luck next time! 💪",
     "unknown": "",
 }
 
